@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  pull_request:
+    branches: ['production']
+
+  push:
+    branches: ['production']
+
+concurrency:
+  group: ${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Check formatting
+        run: npm run format:check
+
+      # `build` runs vue-tsc first, so this is also the type-check.
+      - name: Build
+        run: npm run build
+
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v6
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version-file: backend/.python-version
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      # Catches import-time errors (bad settings, missing deps) until there is a real test suite.
+      - name: Import the app
+        run: uv run python -c "import bean_ai_backend.main"
+
+      - name: Run tests
+        if: hashFiles('backend/tests/**') != ''
+        run: uv run --with pytest pytest
+
+  # Proves the images we ship still build. Same arch as the deploy builds.
+  # The layer cache is only written on pushes, so PRs don't pay the upload.
+  docker:
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [backend, frontend]
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build ${{ matrix.image }} image (cached, not pushed)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.image }}
+          file: ./${{ matrix.image }}/Dockerfile
+          platforms: linux/arm64
+          push: false
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: ${{ github.event_name == 'push' && format('type=gha,scope={0},mode=max', matrix.image) || '' }}

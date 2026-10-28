@@ -130,3 +130,33 @@ sidebar. Settings can switch sending to <kbd>⌘/Ctrl</kbd>+<kbd>Enter</kbd>.
 | `npm run format` / `format:check` | Prettier                    |
 | `npm run mock`          | Fake SSE backend on :8010             |
 | `npm run preview`       | Serve the production build            |
+
+## Deploying
+
+Deploys are tag-driven (`.github/workflows/`). Tag a commit that is already on `production`; any other commit is
+refused. Each deploy builds `ghcr.io/daniel-grinevich/bean-ai-backend` and `bean-ai-frontend` (linux/arm64), pushes
+them to GHCR, then commits `deploy bean <env>: <sha|version>` to
+[rainbow-road](https://github.com/daniel-grinevich/rainbow-road).
+
+| Tag                | Example            | Image tags pushed                                | rainbow-road change                                                                | ArgoCD      |
+| ------------------ | ------------------ | ------------------------------------------------ | ---------------------------------------------------------------------------------- | ----------- |
+| `staging` (moving) | `staging`          | `staging-latest`, `staging-<sha7>`               | `staging/bean/kustomization.yaml`: `navi.dev/deployed-sha: "<sha7>"`               | auto-sync   |
+| `vX.Y.Z`           | `v0.2.0`           | `X.Y.Z`, the tag name, `prod-latest`             | `production/bean/kustomization.yaml`: both `newTag`s set to `X.Y.Z`                | manual Sync |
+
+**Staging** has no versions: it deploys whatever commit the single `staging` tag points at (move it with a force-push).
+It always runs `staging-latest`; its `newTag` never changes. To roll the pods onto the fresh image, CI rewrites
+the pod-template annotation `navi.dev/deployed-sha` in the staging overlay (any one-line
+`navi.dev/deployed-sha: <value>` entry, e.g. in a Deployment patch or `commonAnnotations`). The changed spec makes
+ArgoCD roll the Deployments, and `imagePullPolicy: Always` pulls the new `staging-latest`. `staging-<sha7>` is
+pushed only for traceability. If the overlay has no such annotation, the deploy fails rather than
+silently not rolling. **Production** is pinned to the version tag.
+
+```sh
+git switch production && git pull
+git tag -f staging && git push -f origin staging               # staging (moves the tag)
+git tag v0.2.0 && git push origin v0.2.0                       # production (then Sync in ArgoCD)
+```
+
+CI (lint, format check, type-check/build, backend install + import + tests when `backend/tests/` exists, and a
+no-push Docker build of both images) runs on every PR and push to `production`. The manifest commit needs the
+`RAINBOW_ROAD_PAT` repo secret (contents: write on rainbow-road).
