@@ -1,85 +1,84 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
-import { streamChat } from './api'
+import { useHotkey } from '@tanstack/vue-hotkeys'
+import { watch } from 'vue'
+import { useRoute } from 'vue-router'
+import ConversationSidebar from '@/components/ConversationSidebar.vue'
+import SettingsDialog from '@/components/SettingsDialog.vue'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
+import { Toaster } from '@/components/ui/sonner'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import { focusComposer, useAppActions } from '@/composables/useAppActions'
+import { useChatStore } from '@/stores/chat'
+import { useUiStore } from '@/stores/ui'
 
-interface Message {
-  role: 'user' | 'assistant'
-  text: string
-  error?: boolean
-}
+const ui = useUiStore()
+const chat = useChatStore()
+const route = useRoute()
+const { newChat, toggleSidebar, isDesktop } = useAppActions()
 
-const messages = ref<Message[]>([])
-const input = ref('')
-const busy = ref(false)
-const conversationId = ref<string | null>(null)
-const log = ref<HTMLElement | null>(null)
+watch(
+  () => route.params.conversationId,
+  (id) => (chat.currentConversationId = typeof id === 'string' ? id : null),
+  { immediate: true },
+)
+watch(isDesktop, (desktop) => desktop && (ui.mobileSidebarOpen = false))
 
-async function scrollToBottom() {
-  await nextTick()
-  log.value?.scrollTo({ top: log.value.scrollHeight })
-}
-
-async function send() {
-  const text = input.value.trim()
-  if (!text || busy.value) return
-  input.value = ''
-  busy.value = true
-  messages.value.push({ role: 'user', text })
-  messages.value.push({ role: 'assistant', text: '' })
-  const reply = messages.value[messages.value.length - 1]!
-  scrollToBottom()
-
-  try {
-    for await (const ev of streamChat(text, conversationId.value)) {
-      if (ev.event === 'start') conversationId.value = ev.data.conversation_id
-      else if (ev.event === 'delta') reply.text += ev.data.text
-      else if (ev.event === 'error') {
-        reply.text = ev.data.message
-        reply.error = true
-      }
-      scrollToBottom()
-    }
-  } catch (err) {
-    reply.text = err instanceof Error ? err.message : String(err)
-    reply.error = true
-  } finally {
-    busy.value = false
-  }
-}
-
-function newChat() {
-  messages.value = []
-  conversationId.value = null
-}
+// Global shortcuts. Enter/Shift+Enter live on the composer itself.
+useHotkey('Mod+K', () => void newChat())
+useHotkey('Mod+B', toggleSidebar)
+useHotkey('/', focusComposer)
+useHotkey(
+  'Escape',
+  () => chat.stop(),
+  () => ({ enabled: chat.isStreaming, preventDefault: false }),
+)
 </script>
 
 <template>
-  <main class="chat">
-    <header>
-      <h1>Bean</h1>
-      <button class="ghost" :disabled="busy" @click="newChat">New chat</button>
-    </header>
-
-    <section ref="log" class="log">
-      <p v-if="!messages.length" class="empty">Ask Bean anything.</p>
-      <div
-        v-for="(m, i) in messages"
-        :key="i"
-        class="msg"
-        :class="[m.role, { error: m.error }]"
+  <TooltipProvider :delay-duration="300">
+    <a
+      href="#composer"
+      class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:ring-2 focus:ring-ring"
+    >
+      Skip to message box
+    </a>
+    <div class="flex h-dvh overflow-hidden bg-background text-foreground">
+      <aside
+        v-if="isDesktop"
+        class="shrink-0 overflow-hidden border-r bg-sidebar text-sidebar-foreground transition-[width] duration-200"
+        :class="ui.sidebarOpen ? 'w-72' : 'w-0 border-r-0'"
+        :inert="!ui.sidebarOpen || undefined"
       >
-        {{ m.text || '…' }}
-      </div>
-    </section>
+        <div class="h-full w-72">
+          <ConversationSidebar @new-chat="newChat" />
+        </div>
+      </aside>
 
-    <form class="composer" @submit.prevent="send">
-      <textarea
-        v-model="input"
-        rows="1"
-        placeholder="Message Bean"
-        @keydown.enter.exact.prevent="send"
-      />
-      <button type="submit" :disabled="busy || !input.trim()">Send</button>
-    </form>
-  </main>
+      <Sheet v-else v-model:open="ui.mobileSidebarOpen">
+        <SheetContent side="left" class="w-80 gap-0 bg-sidebar p-0">
+          <SheetHeader class="sr-only">
+            <SheetTitle>Conversations</SheetTitle>
+            <SheetDescription>Switch, start or delete conversations.</SheetDescription>
+          </SheetHeader>
+          <ConversationSidebar
+            in-sheet
+            @new-chat="newChat"
+            @navigate="ui.mobileSidebarOpen = false"
+          />
+        </SheetContent>
+      </Sheet>
+
+      <main class="flex min-w-0 flex-1 flex-col">
+        <RouterView />
+      </main>
+    </div>
+    <SettingsDialog />
+    <Toaster rich-colors close-button position="top-center" />
+  </TooltipProvider>
 </template>
