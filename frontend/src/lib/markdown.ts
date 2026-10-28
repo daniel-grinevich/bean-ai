@@ -114,7 +114,7 @@ function markdownTable(tokens: Token[]): Segment {
     if (t.type === 'thead_open') inHead = true
     else if (t.type === 'thead_close') inHead = false
     else if (t.type === 'tr_open') row = []
-    else if (t.type === 'inline' && row) row.push(t.content.trim())
+    else if (t.type === 'inline' && row) row.push(plainText(t))
     else if (t.type === 'tr_close' && row) {
       if (inHead) columns.push(...row)
       else rows.push(Object.fromEntries(columns.map((c, i) => [c, row![i] ?? ''])))
@@ -152,4 +152,12 @@ function jsonRows(token: Token): { columns: string[]; rows: TableRow[] } | null 
   } catch {
     return null
   }
+}
+
+// Cell text without markdown syntax (**bold**, `code`, links), so it reads and sorts cleanly.
+function plainText(inline: Token): string {
+  const parts = inline.children?.map((c) =>
+    c.type === 'text' || c.type === 'code_inline' ? c.content : c.type === 'softbreak' ? ' ' : '',
+  )
+  return (parts?.join('') ?? inline.content).trim()
 }

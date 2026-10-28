@@ -26,6 +26,7 @@ import type { ConversationSummary } from '@/api'
 import { useConversationsQuery, useDeleteConversation } from '@/queries'
 import { useChatStore } from '@/stores/chat'
 
+defineProps<{ inSheet?: boolean }>()
 const emit = defineEmits<{ navigate: []; newChat: [] }>()
 
 const chat = useChatStore()
@@ -43,10 +44,10 @@ const timeAgo = (iso: string) => formatTimeAgo(new Date(iso))
 
 <template>
   <nav class="flex h-full min-h-0 flex-col" aria-label="Conversations">
-    <div class="flex items-center gap-2 p-3">
+    <div class="flex items-center gap-2 p-3" :class="{ 'pr-14': inSheet }">
       <Button variant="outline" class="flex-1 justify-start" @click="emit('newChat')">
         <SquarePen /> New chat
-        <kbd class="ml-auto text-[10px] text-muted-foreground">⌘K</kbd>
+        <kbd v-if="!inSheet" class="ml-auto text-[10px] text-muted-foreground">⌘K</kbd>
       </Button>
     </div>
     <Separator />

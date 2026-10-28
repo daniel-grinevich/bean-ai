@@ -66,7 +66,11 @@ useHotkey(
             <SheetTitle>Conversations</SheetTitle>
             <SheetDescription>Switch, start or delete conversations.</SheetDescription>
           </SheetHeader>
-          <ConversationSidebar @new-chat="newChat" @navigate="ui.mobileSidebarOpen = false" />
+          <ConversationSidebar
+            in-sheet
+            @new-chat="newChat"
+            @navigate="ui.mobileSidebarOpen = false"
+          />
         </SheetContent>
       </Sheet>
 
