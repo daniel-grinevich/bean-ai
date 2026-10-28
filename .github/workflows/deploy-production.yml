@@ -1,0 +1,141 @@
+name: Deploy production to GHCR
+
+# Release a commit to production by tagging it, e.g. `git tag v1.2.0 && git push origin v1.2.0`.
+# This only bumps the manifest; the production ArgoCD app still needs a manual Sync.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - '!v*-staging*'
+
+# One production deploy at a time, so manifest bumps land in tag order.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/daniel-grinevich/bean-ai
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # Only ship commits that are already on the default branch.
+      - name: Check the tagged commit is on the default branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/$DEFAULT_BRANCH"; then
+            echo "::error::$GITHUB_REF_NAME ($GITHUB_SHA) is not reachable from origin/$DEFAULT_BRANCH; refusing to deploy."
+            exit 1
+          fi
+
+      # v1.2.0 -> 1.2.0, the same value metadata-action's {{version}} produces.
+      - name: Get version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+  build-and-push-image:
+    needs: guard
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    strategy:
+      fail-fast: true
+      matrix:
+        image: [backend, frontend]
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v6
+
+      - name: Log in to the container registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}-${{ matrix.image }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=ref,event=tag
+            type=raw,value=prod-latest
+
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.image }}
+          file: ./${{ matrix.image }}/Dockerfile
+          platforms: linux/arm64
+          push: true
+          provenance: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ env.IMAGE_PREFIX }}-${{ matrix.image }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+  update-manifests:
+    needs: [guard, build-and-push-image]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.guard.outputs.version }}
+      KUSTOMIZATION: production/bean/kustomization.yaml
+    steps:
+      - name: Checkout rainbow-road
+        uses: actions/checkout@v6
+        with:
+          repository: daniel-grinevich/rainbow-road
+          token: ${{ secrets.RAINBOW_ROAD_PAT }}
+
+      # newTag sits on the line right after its image name (see rainbow-road docs/bean-crumb-temporal.md).
+      - name: Update production image tags
+        run: |
+          sed -i '/daniel-grinevich\/bean-ai-backend$/{n;s/newTag: .*/newTag: '"$VERSION"'/;}' "$KUSTOMIZATION"
+          sed -i '/daniel-grinevich\/bean-ai-frontend$/{n;s/newTag: .*/newTag: '"$VERSION"'/;}' "$KUSTOMIZATION"
+          test "$(grep -cF "newTag: $VERSION" "$KUSTOMIZATION")" -eq 2
+          git diff
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$KUSTOMIZATION"
+          if git diff --cached --quiet; then
+            echo "Already at $VERSION; nothing to push."
+            exit 0
+          fi
+          git commit -m "deploy bean production: $VERSION"
+          # Other repos' CI pushes to rainbow-road too; rebase and retry if we lose the race.
+          for _ in 1 2 3; do
+            git push && exit 0
+            git pull --rebase
+          done
+          exit 1

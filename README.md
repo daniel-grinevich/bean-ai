@@ -130,3 +130,24 @@ sidebar. Settings can switch sending to <kbd>⌘/Ctrl</kbd>+<kbd>Enter</kbd>.
 | `npm run format` / `format:check` | Prettier                    |
 | `npm run mock`          | Fake SSE backend on :8010             |
 | `npm run preview`       | Serve the production build            |
+
+## Deploying
+
+Deploys are tag-driven (`.github/workflows/`). Tag a commit that is already on `production`; any other commit is
+refused. Each deploy builds `ghcr.io/daniel-grinevich/bean-ai-backend` and `bean-ai-frontend` (linux/arm64), pushes
+them to GHCR, then bumps both `newTag`s in [rainbow-road](https://github.com/daniel-grinevich/rainbow-road) and pushes
+a `deploy bean <env>: <tag>` commit.
+
+| Tag                   | Example              | Image tags pushed                                 | rainbow-road file                   | ArgoCD        |
+| --------------------- | -------------------- | ------------------------------------------------- | ----------------------------------- | ------------- |
+| `vX.Y.Z-staging*`     | `v0.2.0-staging.1`   | `staging-latest`, `staging-<sha7>`, the tag name  | `staging/bean/kustomization.yaml`    | auto-sync     |
+| `vX.Y.Z`              | `v0.2.0`             | `X.Y.Z`, the tag name, `prod-latest`              | `production/bean/kustomization.yaml` | manual Sync   |
+
+```sh
+git switch production && git pull
+git tag v0.2.0-staging.1 && git push origin v0.2.0-staging.1   # staging
+git tag v0.2.0 && git push origin v0.2.0                       # production (then Sync in ArgoCD)
+```
+
+CI (lint, type-check/build, backend import + tests, and a no-push Docker build of both images) runs on every PR and
+push to `production`. The manifest bump needs the `RAINBOW_ROAD_PAT` repo secret (contents: write on rainbow-road).
