@@ -1,6 +1,7 @@
 name: Deploy staging to GHCR
 
 # Release a commit to staging by tagging it, e.g. `git tag v1.2.0-staging.1 && git push origin v1.2.0-staging.1`.
+# Staging runs the mutable staging-latest tag; the rollout is triggered by a pod-template annotation bump.
 on:
   push:
     tags:
@@ -112,12 +113,16 @@ jobs:
           repository: daniel-grinevich/rainbow-road
           token: ${{ secrets.RAINBOW_ROAD_PAT }}
 
-      # newTag sits on the line right after its image name (see rainbow-road docs/bean-crumb-temporal.md).
-      - name: Update staging image tags
+      # Staging always runs staging-latest (newTag stays put). Bumping the pod-template annotation
+      # changes the Deployment spec, so ArgoCD rolls the pods and they pull the fresh image
+      # (imagePullPolicy: Always). Quoted so an all-digit sha stays a string.
+      - name: Bump the deployed-sha annotation
         run: |
-          sed -i '/daniel-grinevich\/bean-ai-backend$/{n;s/newTag: .*/newTag: staging-'"$SHORT_SHA"'/;}' "$KUSTOMIZATION"
-          sed -i '/daniel-grinevich\/bean-ai-frontend$/{n;s/newTag: .*/newTag: staging-'"$SHORT_SHA"'/;}' "$KUSTOMIZATION"
-          test "$(grep -c "newTag: staging-$SHORT_SHA\$" "$KUSTOMIZATION")" -eq 2
+          sed -i -E 's|^([[:space:]]*navi\.dev/deployed-sha:).*$|\1 "'"$SHORT_SHA"'"|' "$KUSTOMIZATION"
+          if ! grep -q "navi.dev/deployed-sha: \"$SHORT_SHA\"\$" "$KUSTOMIZATION"; then
+            echo "::error::No navi.dev/deployed-sha annotation in $KUSTOMIZATION; nothing to roll."
+            exit 1
+          fi
           git diff
 
       - name: Commit and push

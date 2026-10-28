@@ -135,13 +135,20 @@ sidebar. Settings can switch sending to <kbd>⌘/Ctrl</kbd>+<kbd>Enter</kbd>.
 
 Deploys are tag-driven (`.github/workflows/`). Tag a commit that is already on `production`; any other commit is
 refused. Each deploy builds `ghcr.io/daniel-grinevich/bean-ai-backend` and `bean-ai-frontend` (linux/arm64), pushes
-them to GHCR, then bumps both `newTag`s in [rainbow-road](https://github.com/daniel-grinevich/rainbow-road) and pushes
-a `deploy bean <env>: <tag>` commit.
+them to GHCR, then commits `deploy bean <env>: <sha|version>` to
+[rainbow-road](https://github.com/daniel-grinevich/rainbow-road).
 
-| Tag                   | Example              | Image tags pushed                                 | rainbow-road file                   | ArgoCD        |
-| --------------------- | -------------------- | ------------------------------------------------- | ----------------------------------- | ------------- |
-| `vX.Y.Z-staging*`     | `v0.2.0-staging.1`   | `staging-latest`, `staging-<sha7>`, the tag name  | `staging/bean/kustomization.yaml`    | auto-sync     |
-| `vX.Y.Z`              | `v0.2.0`             | `X.Y.Z`, the tag name, `prod-latest`              | `production/bean/kustomization.yaml` | manual Sync   |
+| Tag               | Example            | Image tags pushed                                | rainbow-road change                                                                | ArgoCD      |
+| ----------------- | ------------------ | ------------------------------------------------ | ---------------------------------------------------------------------------------- | ----------- |
+| `vX.Y.Z-staging*` | `v0.2.0-staging.1` | `staging-latest`, `staging-<sha7>`, the tag name | `staging/bean/kustomization.yaml`: `navi.dev/deployed-sha: "<sha7>"`               | auto-sync   |
+| `vX.Y.Z`          | `v0.2.0`           | `X.Y.Z`, the tag name, `prod-latest`             | `production/bean/kustomization.yaml`: both `newTag`s set to `X.Y.Z`                | manual Sync |
+
+**Staging always runs `staging-latest`**; its `newTag` never changes. To roll the pods onto the fresh image, CI rewrites
+the pod-template annotation `navi.dev/deployed-sha` in the staging overlay (any one-line
+`navi.dev/deployed-sha: <value>` entry, e.g. in a Deployment patch or `commonAnnotations`). The changed spec makes
+ArgoCD roll the Deployments, and `imagePullPolicy: Always` pulls the new `staging-latest`. `staging-<sha7>` and the
+tag name are pushed only for traceability. If the overlay has no such annotation, the deploy fails rather than
+silently not rolling. **Production** is pinned to the version tag.
 
 ```sh
 git switch production && git pull
@@ -149,5 +156,6 @@ git tag v0.2.0-staging.1 && git push origin v0.2.0-staging.1   # staging
 git tag v0.2.0 && git push origin v0.2.0                       # production (then Sync in ArgoCD)
 ```
 
-CI (lint, type-check/build, backend import + tests, and a no-push Docker build of both images) runs on every PR and
-push to `production`. The manifest bump needs the `RAINBOW_ROAD_PAT` repo secret (contents: write on rainbow-road).
+CI (lint, format check, type-check/build, backend install + import + tests when `backend/tests/` exists, and a
+no-push Docker build of both images) runs on every PR and push to `production`. The manifest commit needs the
+`RAINBOW_ROAD_PAT` repo secret (contents: write on rainbow-road).
