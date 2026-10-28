@@ -1,6 +1,7 @@
 import json
 import logging
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Response
@@ -10,11 +11,31 @@ from pydantic import BaseModel, Field
 
 from .agent import MissingApiKey, get_agent
 from .config import settings
+from .db import Database
+from .gateway.core import Gateway, set_gateway
+from .gateway.errors import install_handlers
+from .gateway.hosts import HostRoutingMiddleware
+from .gateway.routes import router as gateway_router
 from .store import ChatMessage, Conversation, store
 
 logger = logging.getLogger("bean")
 
-app = FastAPI(title="Bean AI")
+
+# The barista/grinder gateway needs Postgres; without DATABASE_URL bean runs as before and /v1/* answers 503.
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    gateway = Gateway(settings, Database(settings.database_url)) if settings.database_url else None
+    app.state.gateway = gateway
+    set_gateway(gateway)
+    try:
+        yield
+    finally:
+        set_gateway(None)
+        if gateway is not None:
+            await gateway.aclose()
+
+
+app = FastAPI(title="Bean AI", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,6 +43,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Added last so it runs first: barista/grinder hostnames never reach bean's chat API.
+app.add_middleware(HostRoutingMiddleware, settings=settings)
+install_handlers(app)
+app.include_router(gateway_router)
+
+
+# Plain liveness check, also the only non-/v1 path on the barista and grinder hostnames.
+@app.get("/health")
+async def liveness() -> dict[str, str]:
+    return {"status": "ok"}
 
 
 class ChatRequest(BaseModel):

@@ -7,11 +7,18 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
+    "asyncpg>=0.30",
     "fastapi>=0.159.1",
+    "httpx>=0.28.1",
     "pydantic-ai-slim[openrouter]>=2.59.0",
     "pydantic-settings>=2.16.1",
+    "sqlalchemy[asyncio]>=2.0.36",
     "uvicorn[standard]>=0.54.0",
 ]
+
+[project.scripts]
+# `bean migrate`, `bean keys create|list|revoke`, `bean usage` (see cli.py).
+bean = "bean_ai_backend.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.13.1,<0.14.0"]
@@ -19,5 +26,29 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28.1",
+    "aiosqlite>=0.22.1",
+    "pyright>=1.1.414",
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.4.1",
+    "respx>=0.23.1",
+    "ruff>=0.17.3",
 ]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "ASYNC", "RUF"]
+
+[tool.pyright]
+pythonVersion = "3.13"
+include = ["src", "tests"]
+typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]

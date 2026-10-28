@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 # Bean AI backend: FastAPI + Pydantic AI on uvicorn, port 8000.
-# Runtime config comes from env vars: OPEN_ROUTER_KEY (required), AGENT_MODEL (optional).
+# Runtime config comes from env vars: OPEN_ROUTER_KEY (required), AGENT_MODEL (optional), and DATABASE_URL for the
+# barista/grinder endpoints. Run `bean migrate` (e.g. in an initContainer) before starting a new version.
 
 FROM python:3.13-slim AS build
 # uv from PyPI (pulling the ghcr.io/astral-sh/uv image is blocked on some networks).
