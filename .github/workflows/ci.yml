@@ -49,6 +49,18 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    # The tests run against real Postgres (and the real migrations) here; locally they default to SQLite.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: bean
+          POSTGRES_PASSWORD: bean
+          POSTGRES_DB: bean_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U bean -d bean_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
     steps:
       - name: Checkout Code Repository
         uses: actions/checkout@v6
@@ -63,13 +75,23 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked
 
-      # Catches import-time errors (bad settings, missing deps) until there is a real test suite.
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Check formatting
+        run: uv run ruff format --check .
+
+      - name: Type-check
+        run: uv run pyright
+
+      # Catches import-time errors (bad settings, missing deps).
       - name: Import the app
         run: uv run python -c "import bean_ai_backend.main"
 
       - name: Run tests
-        if: hashFiles('backend/tests/**') != ''
-        run: uv run --with pytest pytest
+        env:
+          TEST_DATABASE_URL: postgresql://bean:bean@localhost:5432/bean_test
+        run: uv run pytest
 
   # Proves the images we ship still build. Same arch as the deploy builds.
   # The layer cache is only written on pushes, so PRs don't pay the upload.

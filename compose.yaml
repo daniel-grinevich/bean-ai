@@ -1,0 +1,21 @@
+# Local Postgres for the backend (barista/grinder keys and usage). Start it with `docker compose up -d`, then
+# DATABASE_URL=postgresql://bean:bean@localhost:5445/bean and `uv run bean migrate` in backend/.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: bean
+      POSTGRES_PASSWORD: bean
+      POSTGRES_DB: bean
+    ports:
+      - "5445:5432"
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bean -d bean"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres:
