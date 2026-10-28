@@ -40,6 +40,30 @@ VITE_API_TARGET=http://localhost:8010 VITE_PORT=5197 npm run dev
 **No API key?** `npm run mock` starts a fake backend on :8010 that streams canned replies (with a table and code;
 include the word "error" in a message to see the error state). Point the UI at it with `VITE_API_TARGET`.
 
+## Containers
+
+| Image                                      | Built from            | Serves                                                         |
+| ------------------------------------------ | --------------------- | -------------------------------------------------------------- |
+| `ghcr.io/daniel-grinevich/bean-ai-backend`  | `backend/Dockerfile`  | uvicorn on **:8000** as non-root uid 10001; health at `/api/health` |
+| `ghcr.io/daniel-grinevich/bean-ai-frontend` | `frontend/Dockerfile` | nginx on **:80**: the static build, SPA fallback, `/api` proxied to `BACKEND_URL` |
+
+```sh
+docker build -t ghcr.io/daniel-grinevich/bean-ai-backend:dev backend
+docker build -t ghcr.io/daniel-grinevich/bean-ai-frontend:dev frontend
+
+docker network create bean
+docker run -d --network bean --network-alias bean-backend \
+  -e OPEN_ROUTER_KEY=... -e AGENT_MODEL=deepseek/deepseek-v4.1-flash-1017 \
+  ghcr.io/daniel-grinevich/bean-ai-backend:dev
+docker run -d --network bean -p 8080:80 ghcr.io/daniel-grinevich/bean-ai-frontend:dev   # http://localhost:8080
+```
+
+- Backend env: `OPEN_ROUTER_KEY` (required), `AGENT_MODEL` (optional). No `.env` is baked into the image.
+- Frontend env: `BACKEND_URL` (default `http://bean-backend:8000`, **no trailing slash**), rendered into the nginx
+  config at start. nginx resolves that host when it starts, so the backend Service/DNS name must exist.
+  Proxy buffering is off for `/api` so streamed replies arrive live. `/healthz` is a cheap liveness check.
+- History is in memory, so run **one backend replica** (or add a shared store) or conversations will scatter.
+
 ## Configuration
 
 | Variable          | Where    | Default                              | Notes                                   |
