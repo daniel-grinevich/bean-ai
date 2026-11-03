@@ -8,6 +8,7 @@ import * as z from 'zod/mini'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import ModelPicker from '@/components/chat/ModelPicker.vue'
 import { useUiStore } from '@/stores/ui'
 
 const MAX_LENGTH = 8000
@@ -141,13 +142,16 @@ defineExpose({
           </div>
         </div>
         <div class="mt-1.5 flex min-h-5 justify-between gap-2 px-1 text-xs text-muted-foreground">
-          <p id="composer-error" class="text-destructive" aria-live="polite">
-            {{
-              field.state.meta.errors
-                .map((e) => (typeof e === 'string' ? e : e?.message))
-                .join(', ')
-            }}
-          </p>
+          <div class="flex min-w-0 items-center gap-2">
+            <ModelPicker />
+            <p id="composer-error" class="text-destructive" aria-live="polite">
+              {{
+                field.state.meta.errors
+                  .map((e) => (typeof e === 'string' ? e : e?.message))
+                  .join(', ')
+              }}
+            </p>
+          </div>
           <p id="composer-hint" class="hidden text-right sm:block">
             <template v-if="ui.enterToSend"><kbd>↵</kbd> send · <kbd>⇧↵</kbd> newline</template>
             <template v-else><kbd>⌘↵</kbd> send · <kbd>↵</kbd> newline</template>

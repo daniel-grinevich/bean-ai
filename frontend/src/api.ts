@@ -5,6 +5,8 @@ export type Role = 'user' | 'assistant'
 export interface ChatMessage {
   role: Role
   content: string
+  // Model id that answered (assistant messages from the server).
+  model?: string | null
 }
 
 export interface ConversationSummary {
@@ -26,8 +28,23 @@ export interface Health {
   model?: string
 }
 
+export type ModelProvider = 'anthropic' | 'openrouter'
+
+export interface ModelInfo {
+  id: string
+  label: string
+  provider: ModelProvider
+  // False when the server has no API key for the provider.
+  available: boolean
+}
+
+export interface ModelList {
+  default: string
+  models: ModelInfo[]
+}
+
 export type StreamEvent =
-  | { event: 'start'; data: { conversation_id: string } }
+  | { event: 'start'; data: { conversation_id: string; model: string } }
   | { event: 'delta'; data: { text: string } }
   | { event: 'done'; data: Record<string, never> }
   | { event: 'error'; data: { message: string } }
@@ -61,6 +78,8 @@ async function errorMessage(res: Response): Promise<string> {
 
 export const getHealth = () => request<Health>('/api/health')
 
+export const listModels = () => request<ModelList>('/api/models')
+
 export const listConversations = () => request<ConversationSummary[]>('/api/conversations')
 
 export const getConversation = (id: string) =>
@@ -73,12 +92,13 @@ export const deleteConversation = (id: string) =>
 export async function* streamChat(
   message: string,
   conversationId: string | null,
+  model: string | null,
   signal?: AbortSignal,
 ): AsyncGenerator<StreamEvent> {
   const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-    body: JSON.stringify({ message, conversation_id: conversationId }),
+    body: JSON.stringify({ message, conversation_id: conversationId, model }),
     signal,
   })
   if (!res.ok) throw new ApiError(await errorMessage(res), res.status)

@@ -65,12 +65,28 @@ async function readBody(req) {
   return JSON.parse(raw || '{}')
 }
 
+const MODELS = {
+  default: 'claude-sonnet-5',
+  models: [
+    { id: 'claude-sonnet-5', label: 'Claude Sonnet 5', provider: 'anthropic', available: true },
+    { id: 'claude-opus-5-5', label: 'Claude Opus 5.5', provider: 'anthropic', available: true },
+    {
+      id: 'deepseek/deepseek-v4.1-flash-1017',
+      label: 'DeepSeek',
+      provider: 'openrouter',
+      available: true,
+    },
+    { id: 'z-ai/glm-5.3', label: 'GLM 5.3', provider: 'openrouter', available: false },
+  ],
+}
+
 createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`)
   const match = url.pathname.match(/^\/api\/conversations\/([^/]+)$/)
 
   if (req.method === 'GET' && url.pathname === '/api/health')
     return json(res, 200, { status: 'ok', model: 'mock (no LLM)' })
+  if (req.method === 'GET' && url.pathname === '/api/models') return json(res, 200, MODELS)
   if (req.method === 'GET' && url.pathname === '/api/conversations') {
     return json(
       res,
@@ -90,8 +106,10 @@ createServer(async (req, res) => {
       : json(res, 404, { detail: 'Conversation not found' })
   }
   if (req.method === 'POST' && url.pathname === '/api/chat') {
-    const { message, conversation_id } = await readBody(req)
+    const { message, conversation_id, model = MODELS.default } = await readBody(req)
     if (!message?.trim()) return json(res, 422, { detail: 'message is required' })
+    if (!MODELS.models.some((m) => m.id === model))
+      return json(res, 422, { detail: `Unknown model '${model}'` })
     let c = conversation_id && conversations.get(conversation_id)
     if (conversation_id && !c) return json(res, 404, { detail: 'Conversation not found' })
     if (!c) {
@@ -112,7 +130,7 @@ createServer(async (req, res) => {
     let closed = false
     res.on('close', () => (closed = true))
 
-    send('start', { conversation_id: c.id })
+    send('start', { conversation_id: c.id, model })
     if (/\berror\b/i.test(message)) {
       await sleep(400)
       send('error', { message: 'The model provider returned 503 (mock error).' })
@@ -126,7 +144,7 @@ createServer(async (req, res) => {
       send('delta', { text: piece })
       await sleep(18)
     }
-    c.messages.push({ role: 'user', content: message }, { role: 'assistant', content: text })
+    c.messages.push({ role: 'user', content: message }, { role: 'assistant', content: text, model })
     c.updated_at = new Date().toISOString()
     if (!closed) send('done', {})
     return res.end()
