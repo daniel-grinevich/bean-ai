@@ -1,7 +1,8 @@
 # Bean AI
 
 Bean is the ops assistant for the Navi coffee-machine platform. It's a FastAPI + [Pydantic AI](https://ai.pydantic.dev)
-backend talking to **DeepSeek via OpenRouter**, plus a Vue 3 chat UI. Later it will connect to the Navi MCP server
+backend talking to **Claude (Sonnet 5 by default) via the Anthropic API**, with DeepSeek and GLM via OpenRouter as
+alternatives, plus a Vue 3 chat UI. Later it will connect to the Navi MCP server
 (live operations) and to crumb (the ETL/analytics warehouse). For now it has no live data and says so.
 
 ```
@@ -18,7 +19,7 @@ frontend/  Vue 3 + Vite + TypeScript chat UI (npm)
 
 ```sh
 cd backend
-cp .env.example .env          # set OPEN_ROUTER_KEY
+cp .env.example .env          # set ANTHROPIC_API_KEY and/or OPEN_ROUTER_KEY
 uv run uvicorn bean_ai_backend.main:app --reload --app-dir src
 ```
 
@@ -53,12 +54,13 @@ docker build -t ghcr.io/daniel-grinevich/bean-ai-frontend:dev frontend
 
 docker network create bean
 docker run -d --network bean --network-alias bean-backend \
-  -e OPEN_ROUTER_KEY=... -e AGENT_MODEL=deepseek/deepseek-v4.1-flash-1017 \
+  -e ANTHROPIC_API_KEY=... -e OPEN_ROUTER_KEY=... \
   ghcr.io/daniel-grinevich/bean-ai-backend:dev
 docker run -d --network bean -p 8080:80 ghcr.io/daniel-grinevich/bean-ai-frontend:dev   # http://localhost:8080
 ```
 
-- Backend env: `OPEN_ROUTER_KEY` (required), `AGENT_MODEL` (optional). No `.env` is baked into the image.
+- Backend env: `ANTHROPIC_API_KEY` / `OPEN_ROUTER_KEY` (each enables that provider's models), `MODELS_FILE` and
+  `AGENT_MODEL` (optional). No `.env` is baked into the image; `models.yaml` is, at `/app/models.yaml`.
 - Frontend env: `BACKEND_URL` (default `http://bean-backend:8000`, **no trailing slash**), rendered into the nginx
   config at start. nginx resolves that host when it starts, so the backend Service/DNS name must exist.
   Proxy buffering is off for `/api` so streamed replies arrive live. `/healthz` is a cheap liveness check.
@@ -66,25 +68,49 @@ docker run -d --network bean -p 8080:80 ghcr.io/daniel-grinevich/bean-ai-fronten
 
 ## Configuration
 
-| Variable          | Where    | Default                              | Notes                                   |
-| ----------------- | -------- | ------------------------------------ | --------------------------------------- |
-| `OPEN_ROUTER_KEY` | backend  | (none)                               | Required for real replies.              |
-| `AGENT_MODEL`     | backend  | `deepseek/deepseek-v4.1-flash-1017`  | Any OpenRouter model id.                |
-| `CORS_ORIGINS`    | backend  | `["http://localhost:5173"]`          | Only needed when not using a proxy.     |
-| `VITE_API_TARGET` | frontend | `http://localhost:8000`              | Dev proxy target for `/api`.            |
-| `VITE_PORT`       | frontend | `5173`                               | Dev server port.                        |
+| Variable            | Where    | Default                     | Notes                                                       |
+| ------------------- | -------- | --------------------------- | ----------------------------------------------------------- |
+| `ANTHROPIC_API_KEY` | backend  | (none)                      | Enables the Claude models (`provider: anthropic`).          |
+| `OPEN_ROUTER_KEY`   | backend  | (none)                      | Enables the OpenRouter models (`provider: openrouter`).     |
+| `MODELS_FILE`       | backend  | `models.yaml` (working dir) | The model list. In the image: `/app/models.yaml`.           |
+| `AGENT_MODEL`       | backend  | (unset)                     | Overrides `default` in the models file; must be in the list. |
+| `CORS_ORIGINS`      | backend  | `["http://localhost:5173"]` | Only needed when not using a proxy.                         |
+| `VITE_API_TARGET`   | frontend | `http://localhost:8000`     | Dev proxy target for `/api`.                                |
+| `VITE_PORT`         | frontend | `5173`                      | Dev server port.                                            |
+
+The server starts (and `/api/health` works) with no keys; a chat with a model whose key is missing gets an `error`
+event naming the variable to set.
+
+### Models (`backend/models.yaml`)
+
+The models Bean offers live in [`backend/models.yaml`](backend/models.yaml), validated at startup (an unknown
+provider, a duplicate id, or a default that isn't an enabled model stops the server with a clear error). It holds
+no secrets: the key for each provider comes from its env var above. To change the list in a cluster, mount a
+ConfigMap over `/app/models.yaml` (or point `MODELS_FILE` at it); no rebuild needed.
+
+| id                                  | Label           | Provider   |
+| ----------------------------------- | --------------- | ---------- |
+| `claude-sonnet-5` (**default**)     | Claude Sonnet 5 | anthropic  |
+| `claude-opus-5-5`                   | Claude Opus 5.5 | anthropic  |
+| `deepseek/deepseek-v4.1-flash-1017` | DeepSeek        | openrouter |
+| `z-ai/glm-5.3`                      | GLM 5.3         | openrouter |
+
+Each entry has `id`, `label`, `provider` (`anthropic` | `openrouter`), `model` (the provider's model name),
+`enabled` (default `true`) and `settings` (Pydantic AI model settings, e.g. `{max_tokens: 8192}`). The UI's model
+picker (under the composer) lists them, greying out ones whose key isn't set.
 
 ## API
 
 | Method   | Path                        | Notes                                                                     |
 | -------- | --------------------------- | ------------------------------------------------------------------------- |
-| `GET`    | `/api/health`               | `{"status": "ok", "model": "<AGENT_MODEL>"}`                              |
-| `POST`   | `/api/chat`                 | Body `{"message", "conversation_id"?}`. Streams SSE (see below).          |
+| `GET`    | `/api/health`               | `{"status": "ok", "model": "<default model id>"}`                         |
+| `GET`    | `/api/models`               | `{default, models: [{id, label, provider, available}]}`; `available` = key set. |
+| `POST`   | `/api/chat`                 | Body `{"message", "conversation_id"?, "model"?}`. Streams SSE (see below). Unknown `model` → 422. |
 | `GET`    | `/api/conversations`        | `[{id, title, updated_at, message_count}]`, newest first.                 |
-| `GET`    | `/api/conversations/{id}`   | `{id, title, updated_at, messages: [{role, content}]}`, or 404.           |
+| `GET`    | `/api/conversations/{id}`   | `{id, title, updated_at, messages: [{role, content, model}]}`, or 404.    |
 | `DELETE` | `/api/conversations/{id}`   | 204, or 404.                                                              |
 
-`POST /api/chat` streams server-sent events: `start` `{"conversation_id"}`, then `delta` `{"text"}` for each
+`POST /api/chat` streams server-sent events: `start` `{"conversation_id", "model"}`, then `delta` `{"text"}` for each
 chunk, then `done` `{}`. Failures arrive as `error` `{"message"}`. Leave out `conversation_id` to start a new
 conversation. History is kept **in memory** (lost on restart). Only completed turns are saved, so a reply
 stopped mid-stream isn't remembered.
@@ -93,10 +119,11 @@ stopped mid-stream isn't remembered.
 
 **Backend** (`backend/src/bean_ai_backend/`)
 
-- `agent.py`: the agent's instructions and model. Add tools with `@agent.tool_plain` (or `@agent.tool` if a tool needs `RunContext`).
+- `agent.py`: the instructions, `build_model()` (provider → Pydantic AI `AnthropicModel` or `OpenRouterModel`) and one cached agent per model. Add tools with `@agent.tool_plain` (or `@agent.tool` if a tool needs `RunContext`).
 - `main.py`: the routes; `/api/chat` streams with `agent.run_stream(...)` and `stream_text(delta=True)`.
 - `store.py`: the in-memory conversation store (Pydantic AI message history + display messages).
-- `config.py`: settings from env vars / `backend/.env`.
+- `config.py`: settings from env vars / `backend/.env`, and the loaded model registry.
+- `registry.py`: loads and validates `models.yaml`; maps each provider to its key env var.
 
 **Frontend** (`frontend/src/`)
 

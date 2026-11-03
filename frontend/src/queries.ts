@@ -8,13 +8,16 @@ import {
   getConversation,
   getHealth,
   listConversations,
+  listModels,
   streamChat,
 } from '@/api'
 import { newId, type UiConversation, type UiMessage } from '@/lib/types'
 import { useChatStore } from '@/stores/chat'
+import { useUiStore } from '@/stores/ui'
 
 export const queryKeys = {
   health: ['health'] as const,
+  models: ['models'] as const,
   conversations: ['conversations'] as const,
   conversation: (id: string) => ['conversation', id] as const,
 }
@@ -25,6 +28,23 @@ export function useHealthQuery() {
     queryFn: getHealth,
     refetchInterval: 30_000,
     retry: false,
+  })
+}
+
+export function useModelsQuery() {
+  return useQuery({ queryKey: queryKeys.models, queryFn: listModels, staleTime: 5 * 60_000 })
+}
+
+// The model to send with: the saved choice if the server still offers it and has its key, else the
+// server default. Null until the list loads, which lets the server pick its default.
+export function useSelectedModel() {
+  const ui = useUiStore()
+  const models = useModelsQuery()
+  return computed(() => {
+    const list = models.data.value
+    if (!list) return null
+    const saved = list.models.find((m) => m.id === ui.model)
+    return saved?.available ? saved.id : list.default
   })
 }
 
@@ -93,6 +113,7 @@ export function useSendMessage() {
   const queryClient = useQueryClient()
   const chat = useChatStore()
   const router = useRouter()
+  const model = useSelectedModel()
 
   function patchMessage(
     conversationId: string | null,
@@ -142,7 +163,7 @@ export function useSendMessage() {
       chat.streamingConversationId = id
 
       try {
-        for await (const ev of streamChat(text, id, controller.signal)) {
+        for await (const ev of streamChat(text, id, model.value, controller.signal)) {
           if (ev.event === 'start' && !id) {
             id = ev.data.conversation_id
             chat.streamingConversationId = id

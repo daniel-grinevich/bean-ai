@@ -10,6 +10,8 @@ export const useUiStore = defineStore('ui', () => {
   const mobileSidebarOpen = ref(false)
   const theme = useLocalStorage<ThemePreference>('bean:theme', 'system')
   const enterToSend = useLocalStorage('bean:enter-to-send', true)
+  // Chosen model id; null means the server default.
+  const model = useLocalStorage<string | null>('bean:model', null)
   const settingsOpen = ref(false)
 
   const prefersDark = usePreferredDark()
@@ -37,6 +39,7 @@ export const useUiStore = defineStore('ui', () => {
     theme,
     isDark,
     enterToSend,
+    model,
     settingsOpen,
     getDraft,
     setDraft,

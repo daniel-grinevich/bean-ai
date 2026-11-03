@@ -8,8 +8,9 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.159.1",
-    "pydantic-ai-slim[openrouter]>=2.59.0",
+    "pydantic-ai-slim[openrouter,anthropic]>=2.59.0",
     "pydantic-settings>=2.16.1",
+    "pyyaml>=6.0.3",
     "uvicorn[standard]>=0.54.0",
 ]
 
@@ -20,4 +21,8 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
+    "pytest>=9.2.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

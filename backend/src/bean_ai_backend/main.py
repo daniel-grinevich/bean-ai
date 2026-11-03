@@ -6,10 +6,11 @@ from datetime import datetime
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .agent import MissingApiKey, get_agent
-from .config import settings
+from .config import registry, settings
+from .registry import Provider
 from .store import ChatMessage, Conversation, store
 
 logger = logging.getLogger("bean")
@@ -28,6 +29,15 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=8000)
     # Omit (or null) to start a new conversation; the id comes back in the `start` event.
     conversation_id: str | None = None
+    # One of the enabled ids from /api/models; omit (or null) for the default.
+    model: str | None = None
+
+    @field_validator("model")
+    @classmethod
+    def _known_model(cls, value: str | None) -> str | None:
+        if value is not None and registry.get(value) is None:
+            raise ValueError(f"Unknown model {value!r}; see /api/models")
+        return value
 
 
 class ConversationSummary(BaseModel):
@@ -44,9 +54,33 @@ class ConversationDetail(BaseModel):
     messages: list[ChatMessage]
 
 
+class ModelInfo(BaseModel):
+    id: str
+    label: str
+    provider: Provider
+    # Whether the provider's API key is set on the server.
+    available: bool
+
+
+class ModelList(BaseModel):
+    default: str
+    models: list[ModelInfo]
+
+
 @app.get("/api/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok", "model": settings.agent_model}
+    return {"status": "ok", "model": registry.default}
+
+
+@app.get("/api/models")
+async def list_models() -> ModelList:
+    return ModelList(
+        default=registry.default,
+        models=[
+            ModelInfo(id=m.id, label=m.label, provider=m.provider, available=bool(settings.api_key(m.provider)))
+            for m in registry.enabled()
+        ],
+    )
 
 
 @app.get("/api/conversations")
@@ -86,18 +120,19 @@ def sse(event: str, data: dict) -> str:
 @app.post("/api/chat")
 async def chat(req: ChatRequest) -> StreamingResponse:
     conv = _get_or_404(req.conversation_id) if req.conversation_id else store.create(req.message)
+    model_id = req.model or registry.default
 
     async def events() -> AsyncIterator[str]:
-        yield sse("start", {"conversation_id": conv.id})
+        yield sse("start", {"conversation_id": conv.id, "model": model_id})
         try:
-            agent = get_agent()
+            agent = get_agent(model_id)
             reply = ""
             async with agent.run_stream(req.message, message_history=conv.history) as result:
                 async for delta in result.stream_text(delta=True, debounce_by=None):
                     reply += delta
                     yield sse("delta", {"text": delta})
             # Only completed turns are saved; if the client stops mid-reply, nothing is recorded.
-            store.record_turn(conv, req.message, reply, result.all_messages())
+            store.record_turn(conv, req.message, reply, result.all_messages(), model_id)
             yield sse("done", {})
         except MissingApiKey as e:
             yield sse("error", {"message": str(e)})

@@ -10,6 +10,8 @@ from pydantic_ai.messages import ModelMessage
 class ChatMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str
+    # Which model id answered (assistant messages only).
+    model: str | None = None
 
 
 @dataclass
@@ -47,9 +49,12 @@ class ConversationStore:
     def delete(self, conversation_id: str) -> bool:
         return self._items.pop(conversation_id, None) is not None
 
-    def record_turn(self, conv: Conversation, user: str, reply: str, history: list[ModelMessage]) -> None:
+    def record_turn(self, conv: Conversation, user: str, reply: str, history: list[ModelMessage], model: str) -> None:
         conv.history = history
-        conv.messages += [ChatMessage(role="user", content=user), ChatMessage(role="assistant", content=reply)]
+        conv.messages += [
+            ChatMessage(role="user", content=user),
+            ChatMessage(role="assistant", content=reply, model=model),
+        ]
         conv.updated_at = datetime.now(UTC)
 
 
