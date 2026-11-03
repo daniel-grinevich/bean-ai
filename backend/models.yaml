@@ -1,4 +1,4 @@
-# Models Bean can use. Loaded and validated at startup (see src/bean_ai_backend/registry.py).
+# Models Bean can use. Loaded and validated at startup (see src/bean_ai_backend/agent/registry.py).
 # No secrets here: each provider's API key comes from its env var (anthropic -> ANTHROPIC_API_KEY,
 # openrouter -> OPEN_ROUTER_KEY). Point MODELS_FILE at another copy (e.g. a mounted ConfigMap) to change
 # the list without rebuilding the image; AGENT_MODEL, if set, overrides `default`.

@@ -117,13 +117,34 @@ stopped mid-stream isn't remembered.
 
 ## Where things live
 
-**Backend** (`backend/src/bean_ai_backend/`)
+**Backend** (`backend/src/bean_ai_backend/`), laid out like FastAPI's
+["Bigger Applications"](https://fastapi.tiangolo.com/tutorial/bigger-applications/):
 
-- `agent.py`: the instructions, `build_model()` (provider → Pydantic AI `AnthropicModel` or `OpenRouterModel`) and one cached agent per model. Add tools with `@agent.tool_plain` (or `@agent.tool` if a tool needs `RunContext`).
-- `main.py`: the routes; `/api/chat` streams with `agent.run_stream(...)` and `stream_text(delta=True)`.
-- `store.py`: the in-memory conversation store (Pydantic AI message history + display messages).
-- `config.py`: settings from env vars / `backend/.env`, and the loaded model registry.
-- `registry.py`: loads and validates `models.yaml`; maps each provider to its key env var.
+```
+main.py             creates the app, CORS, includes the routers; nothing else
+config.py           settings from env vars / backend/.env, and the loaded model registry
+deps.py             FastAPI Depends() helpers (get_store / StoreDep)
+routers/            thin HTTP: validate, call a service, return a schema
+  health.py         GET /api/health
+  models.py         GET /api/models
+  conversations.py  GET/DELETE /api/conversations...
+  chat.py           POST /api/chat; formats the service's events as SSE
+schemas/            Pydantic request/response models (the API's shapes)
+  chat.py           ChatRequest
+  conversations.py  ChatMessage, ConversationSummary, ConversationDetail
+  models.py         ModelInfo, ModelList
+services/           logic with no FastAPI in it; raises domain errors (ConversationNotFound)
+  chat.py           runs a turn: picks the agent, streams deltas, records the completed turn
+  store.py          the in-memory conversation store (Pydantic AI history + display messages)
+agent/              models and agents (tools/toolsets go here too)
+  registry.py       loads and validates models.yaml; maps each provider to its key env var
+  factory.py        build_model() (provider -> AnthropicModel or OpenRouterModel), one cached agent per model
+  instructions.py   the system instructions
+```
+
+Routers return schemas, never the store's internal dataclasses. Add tools to the agent in `agent/factory.py` with
+`@agent.tool_plain` (or `@agent.tool` if a tool needs `RunContext`). The OpenAPI schema is pinned by
+`tests/snapshots/openapi.json` (`tests/test_openapi.py`); regenerate it when the API changes on purpose.
 
 **Frontend** (`frontend/src/`)
 

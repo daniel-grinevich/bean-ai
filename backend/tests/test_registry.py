@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from bean_ai_backend.registry import ModelsFileError, load_registry
+from bean_ai_backend.agent.registry import ModelsFileError, load_registry
 
 GOOD = """\
 default: claude-sonnet-5

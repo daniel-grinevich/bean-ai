@@ -11,7 +11,7 @@ from pydantic_ai import Agent, models
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 
-from bean_ai_backend.agent import INSTRUCTIONS
+from bean_ai_backend.agent.instructions import INSTRUCTIONS
 from bean_ai_backend.config import registry
 
 

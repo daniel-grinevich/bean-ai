@@ -3,7 +3,7 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from .registry import Provider, load_registry
+from .agent.registry import Provider, load_registry
 
 
 # Reads values from environment variables or backend/.env (ANTHROPIC_API_KEY=..., OPEN_ROUTER_KEY=...).

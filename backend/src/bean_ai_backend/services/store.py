@@ -3,11 +3,16 @@ from datetime import UTC, datetime
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel
 from pydantic_ai.messages import ModelMessage
 
 
-class ChatMessage(BaseModel):
+class ConversationNotFound(LookupError):
+    pass
+
+
+# One displayed message. The API returns it as schemas.conversations.ChatMessage.
+@dataclass
+class Message:
     role: Literal["user", "assistant"]
     content: str
     # Which model id answered (assistant messages only).
@@ -22,7 +27,7 @@ class Conversation:
     # What the agent needs to continue the conversation (includes tool calls, etc.).
     history: list[ModelMessage] = field(default_factory=list)
     # What the UI shows: just the user/assistant text.
-    messages: list[ChatMessage] = field(default_factory=list)
+    messages: list[Message] = field(default_factory=list)
 
 
 def _title(text: str) -> str:
@@ -43,6 +48,12 @@ class ConversationStore:
     def get(self, conversation_id: str) -> Conversation | None:
         return self._items.get(conversation_id)
 
+    def require(self, conversation_id: str) -> Conversation:
+        conv = self.get(conversation_id)
+        if conv is None:
+            raise ConversationNotFound(conversation_id)
+        return conv
+
     def all(self) -> list[Conversation]:
         return sorted(self._items.values(), key=lambda c: c.updated_at, reverse=True)
 
@@ -52,8 +63,8 @@ class ConversationStore:
     def record_turn(self, conv: Conversation, user: str, reply: str, history: list[ModelMessage], model: str) -> None:
         conv.history = history
         conv.messages += [
-            ChatMessage(role="user", content=user),
-            ChatMessage(role="assistant", content=reply, model=model),
+            Message(role="user", content=user),
+            Message(role="assistant", content=reply, model=model),
         ]
         conv.updated_at = datetime.now(UTC)
 
