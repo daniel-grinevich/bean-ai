@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic_ai import models
 
-from bean_ai_backend.agent import get_agent
+from bean_ai_backend.agent.factory import get_agent
 from bean_ai_backend.config import settings
 from bean_ai_backend.main import app
 

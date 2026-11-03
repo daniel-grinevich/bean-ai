@@ -7,9 +7,9 @@ from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.openrouter import OpenRouterModel
 
-from bean_ai_backend.agent import MissingApiKey, build_model, get_agent
+from bean_ai_backend.agent.factory import MissingApiKey, build_model, get_agent
 from bean_ai_backend.config import registry, settings
-from bean_ai_backend.store import store
+from bean_ai_backend.services.store import store
 
 CLAUDE = "claude-sonnet-5"
 DEEPSEEK = "deepseek/deepseek-v4.1-flash-1017"
