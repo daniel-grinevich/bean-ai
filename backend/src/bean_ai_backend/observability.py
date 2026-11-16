@@ -2,6 +2,7 @@ import logging
 
 from fastapi import FastAPI
 from openinference.instrumentation.pydantic_ai import OpenInferenceSpanProcessor
+from openinference.semconv.resource import ResourceAttributes
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.sdk.resources import Resource
@@ -21,8 +22,8 @@ def build_tracer_provider(endpoint: str, api_key: str = "") -> TracerProvider:
             {
                 "service.name": "bean-ai",
                 "deployment.environment.name": settings.environment,
-                # The Phoenix project the traces land in.
-                "openinference.project.name": "bean-ai",
+                # The Phoenix project the traces land in: one per environment (bean-local, ...).
+                ResourceAttributes.PROJECT_NAME: f"bean-{settings.environment}",
             }
         )
     )

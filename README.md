@@ -116,9 +116,10 @@ what Phoenix reads (see Phoenix's
 | ----------------------------- | ----------------------- | ----------------------------------------------------------- |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:6006` | Phoenix's base URL; `/v1/traces` is appended. Unset: tracing off. |
 | `PHOENIX_API_KEY`             | (secret)                | Only when Phoenix has auth on. Without it, exports fail with 401. |
-| `ENVIRONMENT`                 | `local`                 | Tags every trace (`deployment.environment.name`).          |
+| `ENVIRONMENT`                 | `local`                 | Picks the Phoenix project `bean-<ENVIRONMENT>`; also tags every trace. |
 
-Traces land in the Phoenix project `bean-ai`. Tracing fails open: unset, the server runs and warns once at startup.
+Traces land in the Phoenix project `bean-<ENVIRONMENT>` (`bean-local`, `bean-staging`, `bean-production`), set by
+the `openinference.project.name` resource attribute; Phoenix creates it on the first trace. Tracing fails open: unset, the server runs and warns once at startup.
 If Phoenix is down, chats still work; the export retries in a background thread and logs
 `Failed to export spans batch ...`.
 

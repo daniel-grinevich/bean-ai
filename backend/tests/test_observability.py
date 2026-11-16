@@ -45,6 +45,21 @@ def test_warns_once_that_tracing_is_off(caplog: pytest.LogCaptureFixture) -> Non
     assert warning.startswith("Tracing is off: OTEL_EXPORTER_OTLP_ENDPOINT is not set")
 
 
+@pytest.mark.parametrize("environment", ["local", "staging", "production"])
+def test_traces_go_to_the_phoenix_project_for_the_environment(
+    environment: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "environment", environment)
+    # Nothing listens here and no span is created, so nothing is sent.
+    provider = build_tracer_provider("http://127.0.0.1:9")
+    try:
+        attributes = provider.resource.attributes
+        assert attributes["openinference.project.name"] == f"bean-{environment}"
+        assert attributes["deployment.environment.name"] == environment
+    finally:
+        provider.shutdown()
+
+
 def test_runs_finish_and_export_errors_are_logged_when_the_collector_is_down(
     caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
