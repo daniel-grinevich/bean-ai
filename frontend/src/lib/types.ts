@@ -1,4 +1,4 @@
-import type { Role } from '@/api'
+import type { Role } from '@/types/conversation'
 
 export type MessageStatus = 'done' | 'streaming' | 'stopped' | 'error'
 

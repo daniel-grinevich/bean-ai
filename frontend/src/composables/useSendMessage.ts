@@ -1,106 +1,21 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { computed, type MaybeRefOrGetter, toValue } from 'vue'
+import { useQueryClient } from '@tanstack/vue-query'
 import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
-import {
-  type ConversationSummary,
-  deleteConversation,
-  getConversation,
-  getHealth,
-  listConversations,
-  listModels,
-  streamChat,
-} from '@/api'
+import { ApiError } from '@/lib/apiError'
+import { streamChat } from '@/lib/chatStream'
+import { queryKeys } from '@/lib/queryKeys'
 import { newId, type UiConversation, type UiMessage } from '@/lib/types'
 import { useChatStore } from '@/stores/chat'
-import { useUiStore } from '@/stores/ui'
-
-export const queryKeys = {
-  health: ['health'] as const,
-  models: ['models'] as const,
-  conversations: ['conversations'] as const,
-  conversation: (id: string) => ['conversation', id] as const,
-}
-
-export function useHealthQuery() {
-  return useQuery({
-    queryKey: queryKeys.health,
-    queryFn: getHealth,
-    refetchInterval: 30_000,
-    retry: false,
-  })
-}
-
-export function useModelsQuery() {
-  return useQuery({ queryKey: queryKeys.models, queryFn: listModels, staleTime: 5 * 60_000 })
-}
-
-// The model to send with: the saved choice if the server still offers it and has its key, else the
-// server default. Null until the list loads, which lets the server pick its default.
-export function useSelectedModel() {
-  const ui = useUiStore()
-  const models = useModelsQuery()
-  return computed(() => {
-    const list = models.data.value
-    if (!list) return null
-    const saved = list.models.find((m) => m.id === ui.model)
-    return saved?.available ? saved.id : list.default
-  })
-}
-
-export function useConversationsQuery() {
-  return useQuery({ queryKey: queryKeys.conversations, queryFn: listConversations })
-}
-
-export function useConversationQuery(id: MaybeRefOrGetter<string | null>) {
-  const chat = useChatStore()
-  return useQuery({
-    queryKey: computed(() => queryKeys.conversation(toValue(id) ?? '')),
-    queryFn: async (): Promise<UiConversation> => {
-      const c = await getConversation(toValue(id)!)
-      return {
-        ...c,
-        messages: c.messages.map((m) => ({ ...m, id: newId(), status: 'done' as const })),
-      }
-    },
-    // While a reply streams into this conversation the cache is the source of truth.
-    enabled: computed(() => !!toValue(id) && chat.streamingConversationId !== toValue(id)),
-    // This client is the only writer while it's open, so local updates stay authoritative.
-    staleTime: Infinity,
-    structuralSharing: false,
-  })
-}
-
-export function useDeleteConversation() {
-  const queryClient = useQueryClient()
-  const chat = useChatStore()
-  const router = useRouter()
-
-  return useMutation({
-    mutationFn: deleteConversation,
-    onMutate: async (id) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.conversations })
-      const previous = queryClient.getQueryData<ConversationSummary[]>(queryKeys.conversations)
-      queryClient.setQueryData<ConversationSummary[]>(queryKeys.conversations, (list) =>
-        list?.filter((c) => c.id !== id),
-      )
-      if (chat.currentConversationId === id) router.push('/')
-      return { previous }
-    },
-    onError: (err, _id, ctx) => {
-      queryClient.setQueryData(queryKeys.conversations, ctx?.previous)
-      toast.error('Could not delete the conversation', { description: err.message })
-    },
-    onSuccess: (_data, id) => {
-      queryClient.removeQueries({ queryKey: queryKeys.conversation(id) })
-      toast.success('Conversation deleted')
-    },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.conversations }),
-  })
-}
+import type { ConversationSummary } from '@/types/conversation'
+import { useApiMutation } from './useApi'
+import { useSelectedModel } from './useModels'
 
 interface SendVariables {
   text: string
+  conversationId: string | null
+}
+
+interface SendResult {
   conversationId: string | null
 }
 
@@ -149,8 +64,9 @@ export function useSendMessage() {
     )
   }
 
-  return useMutation({
-    mutationFn: async ({ text, conversationId }: SendVariables) => {
+  // Error, not ApiError: a stream can also fail with a StreamError or a malformed event.
+  return useApiMutation<SendResult, Error, SendVariables>({
+    mutationFn: async ({ text, conversationId }) => {
       const controller = new AbortController()
       chat.controller = controller
       chat.isStreaming = true
@@ -205,7 +121,7 @@ export function useSendMessage() {
       }
     },
     onError: (err) => {
-      const offline = err instanceof TypeError
+      const offline = err instanceof ApiError && err.status === 0
       toast.error(offline ? 'Could not reach the server' : 'Bean hit an error', {
         description: offline ? 'Check that the backend is running.' : err.message,
       })
