@@ -3,8 +3,8 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from .agent.registry import Provider, load_registry
 from .agent.agent_registry import load_agents
+from .agent.registry import Provider, load_registry
 
 
 # Reads values from environment variables or backend/.env (ANTHROPIC_API_KEY=..., OPEN_ROUTER_KEY=...).
@@ -26,7 +26,10 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173"]
 
     def api_key(self, provider: Provider) -> str:
-        return {"anthropic": self.anthropic_api_key, "openrouter": self.open_router_key}[provider]
+        return {
+            "anthropic": self.anthropic_api_key,
+            "openrouter": self.open_router_key,
+        }[provider]
 
 
 settings = Settings()

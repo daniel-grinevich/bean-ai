@@ -43,7 +43,9 @@ class ModelRegistry(BaseModel):
         if duplicates:
             raise ValueError(f"duplicate model id(s): {', '.join(duplicates)}")
         if self.get(self.default) is None:
-            raise ValueError(f"default model {self.default!r} is not an enabled model in the list")
+            raise ValueError(
+                f"default model {self.default!r} is not an enabled model in the list"
+            )
         return self
 
     def enabled(self) -> list[ModelEntry]:
@@ -63,7 +65,9 @@ def load_registry(path: Path, default_override: str | None = None) -> ModelRegis
     except yaml.YAMLError as e:
         raise ModelsFileError(f"Models file {path} is not valid YAML: {e}") from e
     if not isinstance(raw, dict):
-        raise ModelsFileError(f"Models file {path} must be a mapping with `default` and `models`.")
+        raise ModelsFileError(
+            f"Models file {path} must be a mapping with `default` and `models`."
+        )
     if default_override:
         raw["default"] = default_override
     try:

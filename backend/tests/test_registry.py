@@ -57,16 +57,33 @@ def test_default_override(tmp_path: Path) -> None:
     ("text", "message"),
     [
         (GOOD.replace("provider: anthropic", "provider: openai"), "provider"),
-        (GOOD.replace("id: glm", "id: claude-sonnet-5"), "duplicate model id(s): claude-sonnet-5"),
-        (GOOD.replace("default: claude-sonnet-5", "default: nope"), "default model 'nope'"),
-        (GOOD.replace("default: claude-sonnet-5", "default: old"), "default model 'old'"),
-        (GOOD.replace("    model: z-ai/glm-5.3\n", "    model: z-ai/glm-5.3\n    api_key: sk-123\n"), "api_key"),
+        (
+            GOOD.replace("id: glm", "id: claude-sonnet-5"),
+            "duplicate model id(s): claude-sonnet-5",
+        ),
+        (
+            GOOD.replace("default: claude-sonnet-5", "default: nope"),
+            "default model 'nope'",
+        ),
+        (
+            GOOD.replace("default: claude-sonnet-5", "default: old"),
+            "default model 'old'",
+        ),
+        (
+            GOOD.replace(
+                "    model: z-ai/glm-5.3\n",
+                "    model: z-ai/glm-5.3\n    api_key: sk-123\n",
+            ),
+            "api_key",
+        ),
         ("default: x\nmodels: []\n", "models"),
         ("- just\n- a list\n", "must be a mapping"),
         ("default: [unclosed\n", "not valid YAML"),
     ],
 )
-def test_bad_files_fail_with_a_clear_error(tmp_path: Path, text: str, message: str) -> None:
+def test_bad_files_fail_with_a_clear_error(
+    tmp_path: Path, text: str, message: str
+) -> None:
     with pytest.raises(ModelsFileError, match="models") as exc:
         load_registry(write(tmp_path, text))
     assert message in str(exc.value)

@@ -18,7 +18,9 @@ class AgentEntry(AgentSpec):
     @model_validator(mode="after")
     def _no_model(self) -> "AgentEntry":
         if self.model is not None:
-            raise ValueError("`model` can't be set here: the model is picked per chat from models.yaml")
+            raise ValueError(
+                "`model` can't be set here: the model is picked per chat from models.yaml"
+            )
         return self
 
 
@@ -31,7 +33,9 @@ class AgentRegistry(BaseModel):
     @model_validator(mode="after")
     def _check(self) -> "AgentRegistry":
         if self.default not in self.agents:
-            raise ValueError(f"default agent {self.default!r} is not one of: {', '.join(self.agents)}")
+            raise ValueError(
+                f"default agent {self.default!r} is not one of: {', '.join(self.agents)}"
+            )
         return self
 
     def get(self, agent_id: str) -> AgentEntry | None:
@@ -46,7 +50,9 @@ class AgentRegistry(BaseModel):
             if cap.name not in known
         ]
         if unknown:
-            raise AgentsFileError(f"Unknown capabilities in the agents file: {', '.join(unknown)}")
+            raise AgentsFileError(
+                f"Unknown capabilities in the agents file: {', '.join(unknown)}"
+            )
 
 
 def load_agents(path: Path, default_override: str | None = None) -> AgentRegistry:
@@ -58,11 +64,15 @@ def load_agents(path: Path, default_override: str | None = None) -> AgentRegistr
     except yaml.YAMLError as e:
         raise AgentsFileError(f"Agents file {path} is not valid YAML: {e}") from e
     if not isinstance(raw, dict):
-        raise AgentsFileError(f"Agents file {path} must be a mapping with `default` and `agents`.")
+        raise AgentsFileError(
+            f"Agents file {path} must be a mapping with `default` and `agents`."
+        )
     if default_override:
         raw["default"] = default_override
     try:
         return AgentRegistry.model_validate(raw)
     except ValidationError as e:
-        source = f"{path} (default from DEFAULT_AGENT)" if default_override else str(path)
+        source = (
+            f"{path} (default from DEFAULT_AGENT)" if default_override else str(path)
+        )
         raise AgentsFileError(f"Invalid agents file {source}:\n{e}") from e

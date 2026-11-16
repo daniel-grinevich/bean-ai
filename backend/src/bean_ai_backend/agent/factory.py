@@ -26,10 +26,16 @@ class MissingApiKey(AgentUnavailable):
 def build_model(entry: ModelEntry) -> Model:
     key = settings.api_key(entry.provider)
     if not key:
-        raise MissingApiKey(f"{KEY_ENV_VARS[entry.provider]} is not set, so Bean can't reach {entry.label}.")
+        raise MissingApiKey(
+            f"{KEY_ENV_VARS[entry.provider]} is not set, so Bean can't reach {entry.label}."
+        )
     model_settings = cast(ModelSettings, entry.settings)
     if entry.provider == "anthropic":
-        return AnthropicModel(entry.model, provider=AnthropicProvider(api_key=key), settings=model_settings)
+        return AnthropicModel(
+            entry.model,
+            provider=AnthropicProvider(api_key=key),
+            settings=model_settings,
+        )
     return OpenRouterModel(
         entry.model,
         provider=OpenRouterProvider(api_key=key, app_title="Bean AI"),
@@ -50,7 +56,9 @@ def get_agent(agent_id: str, model_id: str) -> Agent[None, str]:
         raise KeyError(model_id)
     model = build_model(entry)
     try:
-        agent = Agent.from_spec(spec, model=model, name=agent_id, custom_capability_types=CAPABILITY_TYPES)
+        agent = Agent.from_spec(
+            spec, model=model, name=agent_id, custom_capability_types=CAPABILITY_TYPES
+        )
     except ValueError as e:
         # Pydantic AI wraps errors raised while building a capability; re-raise ours so the user sees the reason.
         if isinstance(e.__cause__, AgentUnavailable):

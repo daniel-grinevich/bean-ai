@@ -19,7 +19,9 @@ def events(body: str) -> list[tuple[str, dict]]:
     out = []
     for block in body.strip().split("\n\n"):
         name, data = block.split("\n")
-        out.append((name.removeprefix("event: "), json.loads(data.removeprefix("data: "))))
+        out.append(
+            (name.removeprefix("event: "), json.loads(data.removeprefix("data: ")))
+        )
     return out
 
 
@@ -29,19 +31,41 @@ async def echo(messages: list[ModelMessage], info: AgentInfo):
 
 
 def test_health_reports_default_model(client: TestClient) -> None:
-    assert client.get("/api/health").json() == {"status": "ok", "model": registry.default}
+    assert client.get("/api/health").json() == {
+        "status": "ok",
+        "model": registry.default,
+    }
 
 
-def test_models_availability_follows_keys(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_models_availability_follows_keys(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     body = client.get("/api/models").json()
     assert body["default"] == "claude-sonnet-5"
-    assert [m["id"] for m in body["models"]] == [CLAUDE, "claude-opus-5-5", DEEPSEEK, "z-ai/glm-5.3"]
-    assert body["models"][0] == {"id": CLAUDE, "label": "Claude Sonnet 5", "provider": "anthropic", "available": False}
+    assert [m["id"] for m in body["models"]] == [
+        CLAUDE,
+        "claude-opus-5-5",
+        DEEPSEEK,
+        "z-ai/glm-5.3",
+    ]
+    assert body["models"][0] == {
+        "id": CLAUDE,
+        "label": "Claude Sonnet 5",
+        "provider": "anthropic",
+        "available": False,
+    }
     assert not any(m["available"] for m in body["models"])
 
     monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
-    available = {m["id"]: m["available"] for m in client.get("/api/models").json()["models"]}
-    assert available == {CLAUDE: True, "claude-opus-5-5": True, DEEPSEEK: False, "z-ai/glm-5.3": False}
+    available = {
+        m["id"]: m["available"] for m in client.get("/api/models").json()["models"]
+    }
+    assert available == {
+        CLAUDE: True,
+        "claude-opus-5-5": True,
+        DEEPSEEK: False,
+        "z-ai/glm-5.3": False,
+    }
 
 
 def test_build_model_routes_by_provider(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -56,14 +80,21 @@ def test_build_model_routes_by_provider(monkeypatch: pytest.MonkeyPatch) -> None
     assert glm.model_name == "z-ai/glm-5.3"
 
 
-@pytest.mark.parametrize(("model_id", "env_var"), [(CLAUDE, "ANTHROPIC_API_KEY"), (DEEPSEEK, "OPEN_ROUTER_KEY")])
-def test_missing_key_names_the_right_variable(model_id: str, env_var: str, client: TestClient) -> None:
+@pytest.mark.parametrize(
+    ("model_id", "env_var"),
+    [(CLAUDE, "ANTHROPIC_API_KEY"), (DEEPSEEK, "OPEN_ROUTER_KEY")],
+)
+def test_missing_key_names_the_right_variable(
+    model_id: str, env_var: str, client: TestClient
+) -> None:
     with pytest.raises(MissingApiKey, match=env_var):
         get_agent(agents.default, model_id)
     res = client.post("/api/chat", json={"message": "hello", "model": model_id})
     assert events(res.text)[-1] == (
         "error",
-        {"message": f"{env_var} is not set, so Bean can't reach {registry.get(model_id).label}."},
+        {
+            "message": f"{env_var} is not set, so Bean can't reach {registry.get(model_id).label}."
+        },
     )
 
 
@@ -81,11 +112,16 @@ def test_chat_uses_requested_model_and_records_it(
     monkeypatch.setattr(settings, "open_router_key", "test-key")
     expected = model_id or registry.default
     # Fail if the wrong agent is used: only the expected one gets the fake model.
-    with get_agent(agents.default, expected).override(model=FunctionModel(stream_function=echo)):
+    with get_agent(agents.default, expected).override(
+        model=FunctionModel(stream_function=echo)
+    ):
         res = client.post("/api/chat", json={"message": "hello", "model": model_id})
     evs = events(res.text)
     assert evs[0][1]["model"] == expected
-    assert [e for e in evs if e[0] == "delta"] == [("delta", {"text": "hi "}), ("delta", {"text": "there"})]
+    assert [e for e in evs if e[0] == "delta"] == [
+        ("delta", {"text": "hi "}),
+        ("delta", {"text": "there"}),
+    ]
     assert evs[-1] == ("done", {})
 
     conv = store.get(evs[0][1]["conversation_id"])

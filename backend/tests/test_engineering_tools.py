@@ -44,7 +44,10 @@ async def test_model_sees_docstring_as_tool_description(tmp_path: Path) -> None:
     [tool] = model.last_model_request_parameters.function_tools
     assert tool.name == "read_repo_file"
     assert tool.description.startswith("Read a UTF-8 text file")
-    assert "relative to the repository root" in tool.parameters_json_schema["properties"]["path"]["description"]
+    assert (
+        "relative to the repository root"
+        in tool.parameters_json_schema["properties"]["path"]["description"]
+    )
 
 
 async def test_reads_a_file(tmp_path: Path) -> None:
@@ -78,4 +81,6 @@ async def test_truncates_large_files(tmp_path: Path) -> None:
 
     assert isinstance(part, ToolReturnPart)
     assert part.content.startswith("x" * MAX_BYTES)
-    assert part.content.endswith(f"[truncated: file is {MAX_BYTES + 500} bytes, only the first {MAX_BYTES} were read]")
+    assert part.content.endswith(
+        f"[truncated: file is {MAX_BYTES + 500} bytes, only the first {MAX_BYTES} were read]"
+    )

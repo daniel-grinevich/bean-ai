@@ -12,14 +12,20 @@ logger = logging.getLogger("bean")
 Event = tuple[str, dict[str, Any]]
 
 
-def open_conversation(store: ConversationStore, conversation_id: str | None, message: str) -> Conversation:
+def open_conversation(
+    store: ConversationStore, conversation_id: str | None, message: str
+) -> Conversation:
     """The conversation to continue, or a new one titled from the first message. Raises ConversationNotFound."""
     return store.require(conversation_id) if conversation_id else store.create(message)
 
 
 # Runs one turn: start → delta… → done, or error.
 async def run_turn(
-    store: ConversationStore, conv: Conversation, message: str, agent_id: str, model_id: str
+    store: ConversationStore,
+    conv: Conversation,
+    message: str,
+    agent_id: str,
+    model_id: str,
 ) -> AsyncIterator[Event]:
     yield "start", {"conversation_id": conv.id, "model": model_id}
     try:
@@ -36,4 +42,9 @@ async def run_turn(
         yield "error", {"message": str(e)}
     except Exception:
         logger.exception("chat run failed (conversation %s)", conv.id)
-        yield "error", {"message": "The model request failed. Check the server logs and try again."}
+        yield (
+            "error",
+            {
+                "message": "The model request failed. Check the server logs and try again."
+            },
+        )
