@@ -10,11 +10,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { useModelsQuery, useSelectedModel } from '@/queries'
+import { useModels, useSelectedModel } from '@/composables/useModels'
 import { useUiStore } from '@/stores/ui'
 
 const ui = useUiStore()
-const models = useModelsQuery()
+const models = useModels()
 const selected = useSelectedModel()
 
 const current = computed(() => models.data.value?.models.find((m) => m.id === selected.value))

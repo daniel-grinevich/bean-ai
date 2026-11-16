@@ -7,8 +7,9 @@ import EmptyState from '@/components/chat/EmptyState.vue'
 import MessageList from '@/components/chat/MessageList.vue'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ApiError } from '@/api'
-import { useConversationQuery, useDiscardFailedTurn, useSendMessage } from '@/queries'
+import { useConversation } from '@/composables/useConversations'
+import { useDiscardFailedTurn, useSendMessage } from '@/composables/useSendMessage'
+import { ApiError } from '@/lib/apiError'
 import { useChatStore } from '@/stores/chat'
 
 const props = defineProps<{ conversationId?: string }>()
@@ -17,7 +18,7 @@ const chat = useChatStore()
 const router = useRouter()
 const id = computed(() => props.conversationId ?? null)
 
-const conversation = useConversationQuery(id)
+const conversation = useConversation(id)
 const send = useSendMessage()
 const discardFailedTurn = useDiscardFailedTurn()
 

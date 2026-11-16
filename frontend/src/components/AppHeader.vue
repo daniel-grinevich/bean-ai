@@ -14,14 +14,14 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAppActions } from '@/composables/useAppActions'
-import { useHealthQuery } from '@/queries'
+import { useHealth } from '@/composables/useHealth'
 import { type ThemePreference, useUiStore } from '@/stores/ui'
 
 defineProps<{ title?: string }>()
 
 const ui = useUiStore()
 const { toggleSidebar } = useAppActions()
-const health = useHealthQuery()
+const health = useHealth()
 
 const status = computed(() => {
   if (health.isPending.value) return { label: 'Connecting…', dot: 'bg-muted-foreground' }

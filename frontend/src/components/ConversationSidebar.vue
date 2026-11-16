@@ -22,15 +22,15 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { ConversationSummary } from '@/api'
-import { useConversationsQuery, useDeleteConversation } from '@/queries'
+import type { ConversationSummary } from '@/types/conversation'
+import { useConversations, useDeleteConversation } from '@/composables/useConversations'
 import { useChatStore } from '@/stores/chat'
 
 defineProps<{ inSheet?: boolean }>()
 const emit = defineEmits<{ navigate: []; newChat: [] }>()
 
 const chat = useChatStore()
-const conversations = useConversationsQuery()
+const conversations = useConversations()
 const remove = useDeleteConversation()
 
 const pendingDelete = ref<ConversationSummary | null>(null)
