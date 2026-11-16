@@ -1,6 +1,52 @@
 {
   "components": {
     "schemas": {
+      "AgentInfo": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "description"
+        ],
+        "title": "AgentInfo",
+        "type": "object"
+      },
+      "AgentList": {
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/AgentInfo"
+            },
+            "title": "Agents",
+            "type": "array"
+          },
+          "default": {
+            "title": "Default",
+            "type": "string"
+          }
+        },
+        "required": [
+          "default",
+          "agents"
+        ],
+        "title": "AgentList",
+        "type": "object"
+      },
       "ChatMessage": {
         "properties": {
           "content": {
@@ -36,6 +82,17 @@
       },
       "ChatRequest": {
         "properties": {
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent"
+          },
           "conversation_id": {
             "anyOf": [
               {
@@ -246,6 +303,24 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/agents": {
+      "get": {
+        "operationId": "list_agents_api_agents_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Agents"
+      }
+    },
     "/api/chat": {
       "post": {
         "operationId": "chat_api_chat_post",

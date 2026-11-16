@@ -106,7 +106,8 @@ picker (under the composer) lists them, greying out ones whose key isn't set.
 | -------- | --------------------------- | ------------------------------------------------------------------------- |
 | `GET`    | `/api/health`               | `{"status": "ok", "model": "<default model id>"}`                         |
 | `GET`    | `/api/models`               | `{default, models: [{id, label, provider, available}]}`; `available` = key set. |
-| `POST`   | `/api/chat`                 | Body `{"message", "conversation_id"?, "model"?}`. Streams SSE (see below). Unknown `model` → 422. |
+| `GET`    | `/api/agents`               | `{default, agents: [{id, description}]}` from `agents.yaml`.            |
+| `POST`   | `/api/chat`                 | Body `{"message", "conversation_id"?, "model"?, "agent"?}`. Streams SSE (see below). Unknown `model` or `agent` → 422. |
 | `GET`    | `/api/conversations`        | `[{id, title, updated_at, message_count}]`, newest first.                 |
 | `GET`    | `/api/conversations/{id}`   | `{id, title, updated_at, messages: [{role, content, model}]}`, or 404.    |
 | `DELETE` | `/api/conversations/{id}`   | 204, or 404.                                                              |
@@ -128,6 +129,7 @@ deps.py             FastAPI Depends() helpers (get_store / StoreDep)
 routers/            thin HTTP: validate, call a service, return a schema
   health.py         GET /api/health
   models.py         GET /api/models
+  agents.py         GET /api/agents
   conversations.py  GET/DELETE /api/conversations...
   chat.py           POST /api/chat; formats the service's events as SSE
 schemas/            Pydantic request/response models (the API's shapes)

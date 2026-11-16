@@ -24,9 +24,12 @@ async def chat(req: ChatRequest, store: StoreDep) -> StreamingResponse:
         conv = open_conversation(store, req.conversation_id, req.message)
     except ConversationNotFound:
         raise HTTPException(status_code=404, detail="Conversation not found") from None
-    # Every chat goes to the default agent for now; an orchestrator agent will route to the others later.
     turn = run_turn(
-        store, conv, req.message, agents.default, req.model or registry.default
+        store,
+        conv,
+        req.message,
+        req.agent or agents.default,
+        req.model or registry.default,
     )
     return StreamingResponse(
         (sse(event, data) async for event, data in turn),

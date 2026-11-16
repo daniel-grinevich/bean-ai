@@ -104,6 +104,39 @@ def test_unknown_model_is_422(client: TestClient) -> None:
     assert "Unknown model" in res.text
 
 
+def test_agents_lists_agents_yaml(client: TestClient) -> None:
+    body = client.get("/api/agents").json()
+    assert body["default"] == agents.default
+    assert [a["id"] for a in body["agents"]] == list(agents.agents)
+    assert body["agents"][0]["description"]
+
+
+def test_unknown_agent_is_422(client: TestClient) -> None:
+    res = client.post("/api/chat", json={"message": "hello", "agent": "nope"})
+    assert res.status_code == 422
+    assert "Unknown agent" in res.text
+
+
+@pytest.mark.parametrize("agent_id", [None, "engineering"])
+def test_chat_uses_requested_agent(
+    agent_id: str | None, client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
+    # The engineering agent refuses to run without a repository, so its error event proves it was picked.
+    with get_agent(agents.default, registry.default).override(
+        model=FunctionModel(stream_function=echo)
+    ):
+        res = client.post("/api/chat", json={"message": "hello", "agent": agent_id})
+    evs = events(res.text)
+    if agent_id is None:
+        assert evs[-1] == ("done", {})
+    else:
+        assert evs[-1] == (
+            "error",
+            {"message": "No repository is selected, so this agent can't read code."},
+        )
+
+
 @pytest.mark.parametrize("model_id", [None, DEEPSEEK])
 def test_chat_uses_requested_model_and_records_it(
     model_id: str | None, client: TestClient, monkeypatch: pytest.MonkeyPatch
