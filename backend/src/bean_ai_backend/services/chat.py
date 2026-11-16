@@ -32,11 +32,8 @@ async def run_turn(
     try:
         agent = get_agent(agent_id, model_id)
         reply = ""
-        # No repository yet: picking one per conversation (and checking the user may) comes later,
-        # so agents with RepoFiles refuse to run for now.
-        deps = AgentDeps()
         async with agent.run_stream(
-            message, message_history=conv.history, deps=deps
+            message, message_history=conv.history, deps=AgentDeps(repo=None)
         ) as result:
             async for delta in result.stream_text(delta=True, debounce_by=None):
                 reply += delta
