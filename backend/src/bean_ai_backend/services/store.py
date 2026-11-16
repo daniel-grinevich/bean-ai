@@ -41,7 +41,9 @@ class ConversationStore:
         self._items: dict[str, Conversation] = {}
 
     def create(self, first_message: str) -> Conversation:
-        conv = Conversation(id=uuid4().hex, title=_title(first_message), updated_at=datetime.now(UTC))
+        conv = Conversation(
+            id=uuid4().hex, title=_title(first_message), updated_at=datetime.now(UTC)
+        )
         self._items[conv.id] = conv
         return conv
 
@@ -60,7 +62,14 @@ class ConversationStore:
     def delete(self, conversation_id: str) -> bool:
         return self._items.pop(conversation_id, None) is not None
 
-    def record_turn(self, conv: Conversation, user: str, reply: str, history: list[ModelMessage], model: str) -> None:
+    def record_turn(
+        self,
+        conv: Conversation,
+        user: str,
+        reply: str,
+        history: list[ModelMessage],
+        model: str,
+    ) -> None:
         conv.history = history
         conv.messages += [
             Message(role="user", content=user),

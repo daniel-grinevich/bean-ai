@@ -74,7 +74,11 @@ docker run -d --network bean -p 8080:80 ghcr.io/daniel-grinevich/bean-ai-fronten
 | `OPEN_ROUTER_KEY`   | backend  | (none)                      | Enables the OpenRouter models (`provider: openrouter`).     |
 | `MODELS_FILE`       | backend  | `models.yaml` (working dir) | The model list. In the image: `/app/models.yaml`.           |
 | `AGENT_MODEL`       | backend  | (unset)                     | Overrides `default` in the models file; must be in the list. |
+| `DEFAULT_AGENT`     | backend  | (unset)                     | Overrides `default` in the agents file; must be in the list. |
 | `CORS_ORIGINS`      | backend  | `["http://localhost:5173"]` | Only needed when not using a proxy.                         |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | backend | (unset)            | Trace collector (Phoenix), OTLP/HTTP. Unset: no traces, one startup warning. |
+| `PHOENIX_API_KEY`   | backend  | (unset)                     | Sent as `Authorization: Bearer`; needed when Phoenix has auth on. |
+| `ENVIRONMENT`       | backend  | `local`                     | `local`, `staging` or `production`; tags every trace.       |
 | `VITE_API_TARGET`   | frontend | `http://localhost:8000`     | Dev proxy target for `/api`.                                |
 | `VITE_PORT`         | frontend | `5173`                      | Dev server port.                                            |
 
@@ -99,13 +103,45 @@ Each entry has `id`, `label`, `provider` (`anthropic` | `openrouter`), `model` (
 `enabled` (default `true`) and `settings` (Pydantic AI model settings, e.g. `{max_tokens: 8192}`). The UI's model
 picker (under the composer) lists them, greying out ones whose key isn't set.
 
+### Tracing
+
+The backend traces every agent run, model call and tool call, plus HTTP requests (not `/api/health`), and
+sends them over OTLP/HTTP to a self-hosted [Arize Phoenix](https://arize.com/docs/phoenix). Prompts,
+instructions, model outputs and tool arguments/results are included, so the traces stay on our network.
+Pydantic AI's own spans are converted to OpenInference by `openinference-instrumentation-pydantic-ai`, which is
+what Phoenix reads (see Phoenix's
+[Pydantic AI tracing guide](https://arize.com/docs/phoenix/integrations/python/pydantic/pydantic-tracing)).
+
+| Variable                      | Example                 | Notes                                                       |
+| ----------------------------- | ----------------------- | ----------------------------------------------------------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:6006` | Phoenix's base URL; `/v1/traces` is appended. Unset: tracing off. |
+| `PHOENIX_API_KEY`             | (secret)                | Only when Phoenix has auth on. Without it, exports fail with 401. |
+| `ENVIRONMENT`                 | `local`                 | Picks the Phoenix project `bean-<ENVIRONMENT>`; also tags every trace. |
+
+Traces land in the Phoenix project `bean-<ENVIRONMENT>` (`bean-local`, `bean-staging`, `bean-production`), set by
+the `openinference.project.name` resource attribute; Phoenix creates it on the first trace. Tracing fails open: unset, the server runs and warns once at startup.
+If Phoenix is down, chats still work; the export retries in a background thread and logs
+`Failed to export spans batch ...`.
+
+Run Phoenix locally (UI at http://localhost:6006; auth and Phoenix's usage telemetry off for local use):
+
+```sh
+docker run --rm -p 6006:6006 -e PHOENIX_ENABLE_AUTH=false -e PHOENIX_TELEMETRY_ENABLED=false \
+  arizephoenix/phoenix:version-21.0.0
+# then, in backend/.env:
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:6006
+```
+
+Phoenix 21 turns authentication on by default; a deployed Phoenix needs an API key in `PHOENIX_API_KEY`.
+
 ## API
 
 | Method   | Path                        | Notes                                                                     |
 | -------- | --------------------------- | ------------------------------------------------------------------------- |
 | `GET`    | `/api/health`               | `{"status": "ok", "model": "<default model id>"}`                         |
 | `GET`    | `/api/models`               | `{default, models: [{id, label, provider, available}]}`; `available` = key set. |
-| `POST`   | `/api/chat`                 | Body `{"message", "conversation_id"?, "model"?}`. Streams SSE (see below). Unknown `model` → 422. |
+| `GET`    | `/api/agents`               | `{default, agents: [{id, description}]}` from `agents.yaml`.            |
+| `POST`   | `/api/chat`                 | Body `{"message", "conversation_id"?, "model"?, "agent"?}`. Streams SSE (see below). Unknown `model` or `agent` → 422. |
 | `GET`    | `/api/conversations`        | `[{id, title, updated_at, message_count}]`, newest first.                 |
 | `GET`    | `/api/conversations/{id}`   | `{id, title, updated_at, messages: [{role, content, model}]}`, or 404.    |
 | `DELETE` | `/api/conversations/{id}`   | 204, or 404.                                                              |
@@ -121,12 +157,14 @@ stopped mid-stream isn't remembered.
 ["Bigger Applications"](https://fastapi.tiangolo.com/tutorial/bigger-applications/):
 
 ```
-main.py             creates the app, CORS, includes the routers; nothing else
-config.py           settings from env vars / backend/.env, and the loaded model registry
+main.py             creates the app, CORS, includes the routers, sets up tracing; nothing else
+observability.py    setup_tracing(): OTLP traces of agent runs (OpenInference, for Phoenix) and HTTP requests
+config.py           settings from env vars / backend/.env, and the loaded model and agent registries
 deps.py             FastAPI Depends() helpers (get_store / StoreDep)
 routers/            thin HTTP: validate, call a service, return a schema
   health.py         GET /api/health
   models.py         GET /api/models
+  agents.py         GET /api/agents
   conversations.py  GET/DELETE /api/conversations...
   chat.py           POST /api/chat; formats the service's events as SSE
 schemas/            Pydantic request/response models (the API's shapes)
@@ -136,14 +174,26 @@ schemas/            Pydantic request/response models (the API's shapes)
 services/           logic with no FastAPI in it; raises domain errors (ConversationNotFound)
   chat.py           runs a turn: picks the agent, streams deltas, records the completed turn
   store.py          the in-memory conversation store (Pydantic AI history + display messages)
-agent/              models and agents (tools/toolsets go here too)
+agent/              models, agents and their capabilities
   registry.py       loads and validates models.yaml; maps each provider to its key env var
-  factory.py        build_model() (provider -> AnthropicModel or OpenRouterModel), one cached agent per model
-  instructions.py   the system instructions
+  agents.yaml       the agent list (one Pydantic AI AgentSpec per agent)
+  agent_registry.py loads and validates agents.yaml
+  instructions/     system instructions, one <agent id>.md per agent
+  factory.py        build_model() (provider -> AnthropicModel or OpenRouterModel), one cached agent per (agent, model)
+  deps.py           AgentDeps: what each run brings (the repository), passed as `deps=` per chat turn
+  errors.py         AgentUnavailable: an agent can't run (missing key, no repository); shown to the user
+  tools/            our capabilities; CAPABILITY_TYPES in __init__.py lists the ones agents.yaml can name
+    engineering.py  RepoFiles: the read_repo_file tool over the run's repository (deps.repo)
+repos/              repositories agents read, behind one RepoSource protocol
+  base.py           RepoSource, RepoError, repo_path() (the path rules every source applies)
+  local.py          LocalRepoSource: a checkout on this machine (a Forgejo source comes later)
 ```
 
-Routers return schemas, never the store's internal dataclasses. Add tools to the agent in `agent/factory.py` with
-`@agent.tool_plain` (or `@agent.tool` if a tool needs `RunContext`). The OpenAPI schema is pinned by
+Routers return schemas, never the store's internal dataclasses. Agents are defined in `backend/src/bean_ai_backend/agent/agents.yaml`
+(a description plus a list of capabilities); each agent's instructions live in
+`agent/instructions/<id>.md`. To add tools, write them in a `FunctionToolset`, wrap it in an
+`AbstractCapability` subclass (see `RepoFiles`), add the class to `CAPABILITY_TYPES`, and name it under an agent's
+`capabilities`. The OpenAPI schema is pinned by
 `tests/snapshots/openapi.json` (`tests/test_openapi.py`); regenerate it when the API changes on purpose.
 
 **Frontend** (`frontend/src/`)

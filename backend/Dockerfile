@@ -2,6 +2,7 @@
 # Bean AI backend: FastAPI + Pydantic AI on uvicorn, port 8000.
 # Runtime config comes from env vars: ANTHROPIC_API_KEY and/or OPEN_ROUTER_KEY, MODELS_FILE and AGENT_MODEL (optional).
 # The model list is /app/models.yaml; mount a ConfigMap over it (or point MODELS_FILE elsewhere) to change it.
+# The agent list ships inside the package (agent/agents.yaml), so changing it means a new image.
 
 FROM python:3.13-slim AS build
 # uv from PyPI (pulling the ghcr.io/astral-sh/uv image is blocked on some networks).

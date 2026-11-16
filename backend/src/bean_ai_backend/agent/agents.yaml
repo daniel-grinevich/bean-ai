@@ -1,0 +1,21 @@
+# Agents Bean can run. Loaded and validated at startup (see src/bean_ai_backend/agent/agent_registry.py).
+# Each entry is a Pydantic AI agent spec (pydantic_ai.AgentSpec, what Agent.from_file reads) without `model`:
+# the model is picked per chat from models.yaml. DEFAULT_AGENT, if set, overrides `default`.
+# Each agent's instructions are in instructions/<id>.md next to this file.
+#
+# Per agent:
+#   description   what the agent is for (an orchestrator will read this to pick an agent)
+#   capabilities  what it can do: Pydantic AI built-ins (WebSearch, Thinking, ...) or ours, listed in
+#                 agent/tools/__init__.py (RepoFiles, ...). An agent whose capability can't be set up
+#                 here (e.g. RepoFiles with no repository) fails with that reason when picked; the rest still work.
+
+default: bean
+agents:
+  bean:
+    description: Operations assistant for the Navi coffee machine fleet.
+    capabilities: []
+
+  senior-dev-daniel:
+    description: Answers questions about the Bean AI codebase by reading its files.
+    capabilities:
+      - RepoFiles

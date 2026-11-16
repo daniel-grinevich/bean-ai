@@ -11,8 +11,7 @@ from pydantic_ai import Agent, models
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 
-from bean_ai_backend.agent.instructions import INSTRUCTIONS
-from bean_ai_backend.config import registry
+from bean_ai_backend.config import agents, registry
 
 
 def sse_body(text: str) -> bytes:
@@ -35,12 +34,20 @@ def sse_body(text: str) -> bytes:
         ),
         (
             "content_block_start",
-            {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
+            {
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {"type": "text", "text": ""},
+            },
         ),
         *[
             (
                 "content_block_delta",
-                {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": f"{word} "}},
+                {
+                    "type": "content_block_delta",
+                    "index": 0,
+                    "delta": {"type": "text_delta", "text": f"{word} "},
+                },
             )
             for word in text.split()
         ],
@@ -55,7 +62,9 @@ def sse_body(text: str) -> bytes:
         ),
         ("message_stop", {"type": "message_stop"}),
     ]
-    return "".join(f"event: {name}\ndata: {json.dumps(data)}\n\n" for name, data in events).encode()
+    return "".join(
+        f"event: {name}\ndata: {json.dumps(data)}\n\n" for name, data in events
+    ).encode()
 
 
 # Async tests run on the anyio pytest plugin (anyio is already a dependency).
@@ -73,19 +82,29 @@ def requests_seen(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
     return []
 
 
-async def test_claude_turns_round_trip_through_the_sdk(requests_seen: list[dict]) -> None:
+async def test_claude_turns_round_trip_through_the_sdk(
+    requests_seen: list[dict],
+) -> None:
     def handler(request: httpx2.Request) -> httpx2.Response:
         requests_seen.append(json.loads(request.content))
         return httpx2.Response(
-            200, headers={"content-type": "text/event-stream"}, content=sse_body("hello from claude")
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=sse_body("hello from claude"),
         )
 
     client = AsyncAnthropic(
-        api_key="test-key", http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(handler)), max_retries=0
+        api_key="test-key",
+        http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(handler)),
+        max_retries=0,
     )
     entry = registry.get("claude-sonnet-5")
-    model = AnthropicModel(entry.model, provider=AnthropicProvider(anthropic_client=client), settings=entry.settings)
-    agent = Agent(model, instructions=INSTRUCTIONS)
+    model = AnthropicModel(
+        entry.model,
+        provider=AnthropicProvider(anthropic_client=client),
+        settings=entry.settings,
+    )
+    agent = Agent.from_spec(agents.get(agents.default), model=model)
 
     # Same calls as /api/chat; the second turn sends history, so assistant messages get mapped too.
     history = []

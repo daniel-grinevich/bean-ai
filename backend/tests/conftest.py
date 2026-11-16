@@ -4,8 +4,10 @@ from pydantic_ai import models
 
 from bean_ai_backend.agent.factory import get_agent
 from bean_ai_backend.config import settings
-from bean_ai_backend.main import app
 
+# Tests never send traces, even with OTEL_EXPORTER_OTLP_ENDPOINT in the shell or backend/.env.
+# This runs before any test module imports bean_ai_backend.main, which is where tracing is set up.
+settings.otel_exporter_otlp_endpoint = ""
 # Tests never reach a real model; anything that tries fails loudly.
 models.ALLOW_MODEL_REQUESTS = False
 
@@ -22,4 +24,6 @@ def no_keys(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def client() -> TestClient:
+    from bean_ai_backend.main import app
+
     return TestClient(app)

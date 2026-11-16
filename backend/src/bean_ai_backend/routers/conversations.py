@@ -12,7 +12,12 @@ router = APIRouter()
 @router.get("/conversations")
 async def list_conversations(store: StoreDep) -> list[ConversationSummary]:
     return [
-        ConversationSummary(id=c.id, title=c.title, updated_at=c.updated_at, message_count=len(c.messages))
+        ConversationSummary(
+            id=c.id,
+            title=c.title,
+            updated_at=c.updated_at,
+            message_count=len(c.messages),
+        )
         for c in store.all()
     ]
 
@@ -24,7 +29,9 @@ async def get_conversation(conversation_id: str, store: StoreDep) -> Conversatio
     except ConversationNotFound:
         raise HTTPException(status_code=404, detail="Conversation not found") from None
     messages = [ChatMessage(**asdict(m)) for m in c.messages]
-    return ConversationDetail(id=c.id, title=c.title, updated_at=c.updated_at, messages=messages)
+    return ConversationDetail(
+        id=c.id, title=c.title, updated_at=c.updated_at, messages=messages
+    )
 
 
 @router.delete("/conversations/{conversation_id}", status_code=204)
