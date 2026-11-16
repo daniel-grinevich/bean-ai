@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -20,6 +21,10 @@ class Settings(BaseSettings):
     # Optional override of the default agent in agents.yaml; must be one of its ids.
     default_agent: str | None = None
     cors_origins: list[str] = ["http://localhost:5173"]
+    # Logfire project write token. Unset: the server runs normally and sends no traces.
+    logfire_token: str = Field(default="", repr=False)
+    # Where this server runs; tags every trace so Logfire can separate them.
+    environment: Literal["local", "staging", "production"] = "local"
 
     def api_key(self, provider: Provider) -> str:
         return {

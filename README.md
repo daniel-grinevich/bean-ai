@@ -76,6 +76,8 @@ docker run -d --network bean -p 8080:80 ghcr.io/daniel-grinevich/bean-ai-fronten
 | `AGENT_MODEL`       | backend  | (unset)                     | Overrides `default` in the models file; must be in the list. |
 | `DEFAULT_AGENT`     | backend  | (unset)                     | Overrides `default` in the agents file; must be in the list. |
 | `CORS_ORIGINS`      | backend  | `["http://localhost:5173"]` | Only needed when not using a proxy.                         |
+| `LOGFIRE_TOKEN`     | backend  | (none)                      | Logfire write token. Unset: no traces sent, one startup warning. |
+| `ENVIRONMENT`       | backend  | `local`                     | `local`, `staging` or `production`; tags every trace.       |
 | `VITE_API_TARGET`   | frontend | `http://localhost:8000`     | Dev proxy target for `/api`.                                |
 | `VITE_PORT`         | frontend | `5173`                      | Dev server port.                                            |
 
@@ -100,6 +102,34 @@ Each entry has `id`, `label`, `provider` (`anthropic` | `openrouter`), `model` (
 `enabled` (default `true`) and `settings` (Pydantic AI model settings, e.g. `{max_tokens: 8192}`). The UI's model
 picker (under the composer) lists them, greying out ones whose key isn't set.
 
+### Tracing
+
+The backend traces HTTP requests (not `/api/health`) and every agent run, model request and tool call, using
+OpenTelemetry through the Logfire SDK (`observability.py`). Where the traces go depends only on env vars:
+
+| Set                                                  | Traces go to                                  |
+| ---------------------------------------------------- | --------------------------------------------- |
+| nothing                                              | nowhere; one startup warning says so          |
+| `LOGFIRE_TOKEN`                                      | hosted Logfire                                |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`                        | that OTLP backend only (Phoenix, Langfuse, …) |
+| both                                                 | both                                          |
+
+To use any OpenTelemetry backend instead of Logfire, leave `LOGFIRE_TOKEN` unset and set these in the process
+environment (shell, container env). Unlike `LOGFIRE_TOKEN`, they are not read from `backend/.env`:
+
+```sh
+OTEL_EXPORTER_OTLP_ENDPOINT=https://otel.example.com   # base URL; /v1/traces and /v1/metrics are appended
+# or traces only, with the full path:
+OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=https://otel.example.com/v1/traces
+# if the backend needs auth (standard OTel format, comma-separated key=value):
+OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer%20<token>
+```
+
+Data is sent as protobuf over HTTP (port 4318 on most collectors), not gRPC. See Logfire's
+[alternative backends guide](https://pydantic.dev/docs/logfire/guides/alternative-backends/) and Pydantic AI's
+[Logfire with an alternative OTel backend](https://pydantic.dev/docs/ai/integrations/logfire/#logfire-with-an-alternative-otel-backend).
+Pydantic AI records prompts, instructions, model outputs, tool arguments and tool results in its spans by default.
+
 ## API
 
 | Method   | Path                        | Notes                                                                     |
@@ -123,7 +153,8 @@ stopped mid-stream isn't remembered.
 ["Bigger Applications"](https://fastapi.tiangolo.com/tutorial/bigger-applications/):
 
 ```
-main.py             creates the app, CORS, includes the routers; nothing else
+main.py             creates the app, CORS, includes the routers, sets up tracing; nothing else
+observability.py    setup_observability(): Logfire configure + Pydantic AI / FastAPI instrumentation
 config.py           settings from env vars / backend/.env, and the loaded model and agent registries
 deps.py             FastAPI Depends() helpers (get_store / StoreDep)
 routers/            thin HTTP: validate, call a service, return a schema
