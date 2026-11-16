@@ -4,6 +4,7 @@ import pytest
 from pydantic_ai.agent.spec import get_capability_registry
 from pydantic_ai.models.test import TestModel
 
+from bean_ai_backend.agent import agent_registry
 from bean_ai_backend.agent.agent_registry import AgentsFileError, load_agents
 from bean_ai_backend.agent.errors import AgentUnavailable
 from bean_ai_backend.agent.factory import get_agent
@@ -23,21 +24,24 @@ agents:
 """
 
 
-def write(tmp_path: Path, text: str) -> Path:
+@pytest.fixture
+def agents_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point load_agents at a temporary agents.yaml; tests write their YAML into it."""
     path = tmp_path / "agents.yaml"
-    path.write_text(text)
+    monkeypatch.setattr(agent_registry, "AGENTS_FILE", path)
     return path
 
 
 def test_bundled_file_is_valid() -> None:
-    agents = load_agents(Path(__file__).parents[1] / "agents.yaml")
+    agents = load_agents()
     assert agents.default == "bean"
     assert set(agents.agents) == {"bean", "engineering"}
     agents.check_capabilities(get_capability_registry(CAPABILITY_TYPES))
 
 
-def test_default_override(tmp_path: Path) -> None:
-    assert load_agents(write(tmp_path, GOOD), default_override="eng").default == "eng"
+def test_default_override(agents_file: Path) -> None:
+    agents_file.write_text(GOOD)
+    assert load_agents(default_override="eng").default == "eng"
 
 
 @pytest.mark.parametrize(
@@ -59,15 +63,17 @@ def test_default_override(tmp_path: Path) -> None:
     ],
 )
 def test_bad_files_fail_with_a_clear_error(
-    tmp_path: Path, text: str, message: str
+    agents_file: Path, text: str, message: str
 ) -> None:
+    agents_file.write_text(text)
     with pytest.raises(AgentsFileError) as exc:
-        load_agents(write(tmp_path, text))
+        load_agents()
     assert message in str(exc.value)
 
 
-def test_unknown_capability_is_named(tmp_path: Path) -> None:
-    agents = load_agents(write(tmp_path, GOOD.replace("[RepoFiles]", "[RepoFile]")))
+def test_unknown_capability_is_named(agents_file: Path) -> None:
+    agents_file.write_text(GOOD.replace("[RepoFiles]", "[RepoFile]"))
+    agents = load_agents()
     with pytest.raises(AgentsFileError, match="eng: RepoFile"):
         agents.check_capabilities(get_capability_registry(CAPABILITY_TYPES))
 

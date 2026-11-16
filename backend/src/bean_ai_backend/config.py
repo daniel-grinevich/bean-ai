@@ -17,8 +17,6 @@ class Settings(BaseSettings):
     models_file: Path = Path("models.yaml")
     # Optional override of the default model in models.yaml; must be one of its enabled ids.
     agent_model: str | None = None
-    # The agent list (see agents.yaml), resolved like models_file.
-    agents_file: Path = Path("agents.yaml")
     # Optional override of the default agent in agents.yaml; must be one of its ids.
     default_agent: str | None = None
     # The checkout the RepoFiles capability reads. No default: unset, agents with RepoFiles refuse to run.
@@ -35,4 +33,4 @@ class Settings(BaseSettings):
 settings = Settings()
 # Loaded at import so a bad models or agents file stops the server at startup instead of on the first chat.
 registry = load_registry(settings.models_file, settings.agent_model)
-agents = load_agents(settings.agents_file, settings.default_agent)
+agents = load_agents(settings.default_agent)

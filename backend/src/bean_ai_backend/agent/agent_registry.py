@@ -55,17 +55,23 @@ class AgentRegistry(BaseModel):
             )
 
 
-def load_agents(path: Path, default_override: str | None = None) -> AgentRegistry:
+# Ships inside the package, so it's the same file in a checkout and in the image.
+AGENTS_FILE = Path(__file__).with_name("agents.yaml")
+
+
+def load_agents(default_override: str | None = None) -> AgentRegistry:
     """Read and validate agents.yaml. Raises AgentsFileError with a readable message on any problem."""
     try:
-        raw = yaml.safe_load(path.read_text())
+        raw = yaml.safe_load(AGENTS_FILE.read_text())
     except OSError as e:
-        raise AgentsFileError(f"Can't read agents file {path}: {e}") from e
+        raise AgentsFileError(f"Can't read agents file {AGENTS_FILE}: {e}") from e
     except yaml.YAMLError as e:
-        raise AgentsFileError(f"Agents file {path} is not valid YAML: {e}") from e
+        raise AgentsFileError(
+            f"Agents file {AGENTS_FILE} is not valid YAML: {e}"
+        ) from e
     if not isinstance(raw, dict):
         raise AgentsFileError(
-            f"Agents file {path} must be a mapping with `default` and `agents`."
+            f"Agents file {AGENTS_FILE} must be a mapping with `default` and `agents`."
         )
     if default_override:
         raw["default"] = default_override
@@ -73,6 +79,8 @@ def load_agents(path: Path, default_override: str | None = None) -> AgentRegistr
         return AgentRegistry.model_validate(raw)
     except ValidationError as e:
         source = (
-            f"{path} (default from DEFAULT_AGENT)" if default_override else str(path)
+            f"{AGENTS_FILE} (default from DEFAULT_AGENT)"
+            if default_override
+            else AGENTS_FILE
         )
         raise AgentsFileError(f"Invalid agents file {source}:\n{e}") from e

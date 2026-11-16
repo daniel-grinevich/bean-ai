@@ -74,7 +74,6 @@ docker run -d --network bean -p 8080:80 ghcr.io/daniel-grinevich/bean-ai-fronten
 | `OPEN_ROUTER_KEY`   | backend  | (none)                      | Enables the OpenRouter models (`provider: openrouter`).     |
 | `MODELS_FILE`       | backend  | `models.yaml` (working dir) | The model list. In the image: `/app/models.yaml`.           |
 | `AGENT_MODEL`       | backend  | (unset)                     | Overrides `default` in the models file; must be in the list. |
-| `AGENTS_FILE`       | backend  | `agents.yaml` (working dir) | The agent list. In the image: `/app/agents.yaml`.           |
 | `DEFAULT_AGENT`     | backend  | (unset)                     | Overrides `default` in the agents file; must be in the list. |
 | `REPO_ROOT`         | backend  | (unset)                     | Checkout the `RepoFiles` capability reads. Unset: agents using it refuse to run. |
 | `CORS_ORIGINS`      | backend  | `["http://localhost:5173"]` | Only needed when not using a proxy.                         |
@@ -141,14 +140,15 @@ services/           logic with no FastAPI in it; raises domain errors (Conversat
   store.py          the in-memory conversation store (Pydantic AI history + display messages)
 agent/              models, agents and their capabilities
   registry.py       loads and validates models.yaml; maps each provider to its key env var
-  agent_registry.py loads and validates agents.yaml (one Pydantic AI AgentSpec per agent)
+  agents.yaml       the agent list (one Pydantic AI AgentSpec per agent)
+  agent_registry.py loads and validates agents.yaml
   factory.py        build_model() (provider -> AnthropicModel or OpenRouterModel), one cached agent per (agent, model)
   errors.py         AgentUnavailable: an agent can't run here (missing key, unset REPO_ROOT); shown to the user
   tools/            our capabilities; CAPABILITY_TYPES in __init__.py lists the ones agents.yaml can name
     engineering.py  RepoFiles: the read_repo_file tool over REPO_ROOT
 ```
 
-Routers return schemas, never the store's internal dataclasses. Agents are defined in `backend/agents.yaml`
+Routers return schemas, never the store's internal dataclasses. Agents are defined in `backend/src/bean_ai_backend/agent/agents.yaml`
 (instructions plus a list of capabilities). To add tools, write them in a `FunctionToolset`, wrap it in an
 `AbstractCapability` subclass (see `RepoFiles`), add the class to `CAPABILITY_TYPES`, and name it under an agent's
 `capabilities`. The OpenAPI schema is pinned by
