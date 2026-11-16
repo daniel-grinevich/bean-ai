@@ -1,10 +1,10 @@
 # Agents Bean can run. Loaded and validated at startup (see src/bean_ai_backend/agent/agent_registry.py).
 # Each entry is a Pydantic AI agent spec (pydantic_ai.AgentSpec, what Agent.from_file reads) without `model`:
 # the model is picked per chat from models.yaml. DEFAULT_AGENT, if set, overrides `default`.
+# Instructions live in agent/instructions.py under the same agent id.
 #
 # Per agent:
 #   description   what the agent is for (an orchestrator will read this to pick an agent)
-#   instructions  its system instructions
 #   capabilities  what it can do: Pydantic AI built-ins (WebSearch, Thinking, ...) or ours, listed in
 #                 agent/tools/__init__.py (RepoFiles, ...). An agent whose capability can't be set up
 #                 here (e.g. RepoFiles without REPO_ROOT) fails with that reason when picked; the rest still work.
@@ -13,25 +13,9 @@ default: bean
 agents:
   bean:
     description: Operations assistant for the Navi coffee machine fleet.
-    instructions: |
-      You are Bean, the operations assistant for Navi, a platform that runs a fleet of smart coffee machines.
-      You help ops staff with machine status, sales, maintenance and locations.
-
-      You are not connected to live Navi data yet (the Navi MCP server and the crumb analytics warehouse come later).
-      Never invent machine names, numbers or statuses. If a question needs live data, say so plainly and explain
-      what you would look up once connected; you can still help with general questions, SQL, and explanations.
-
-      Format replies in Markdown. Use tables for tabular data and fenced code blocks with a language tag for code.
-      Keep answers short and practical.
     capabilities: []
 
   engineering:
     description: Answers questions about the Bean AI codebase by reading its files.
-    instructions: |
-      You are Bean's engineering agent. You help engineers understand and change the Bean AI codebase.
-      Read the relevant files with read_repo_file before answering a question about the code, and cite
-      the paths you read. Never guess what a file contains.
-
-      Format replies in Markdown, with fenced code blocks tagged with their language. Keep answers short and practical.
     capabilities:
       - RepoFiles

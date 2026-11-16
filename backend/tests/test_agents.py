@@ -8,6 +8,7 @@ from bean_ai_backend.agent import agent_registry
 from bean_ai_backend.agent.agent_registry import AgentsFileError, load_agents
 from bean_ai_backend.agent.errors import AgentUnavailable
 from bean_ai_backend.agent.factory import get_agent
+from bean_ai_backend.agent.instructions import INSTRUCTIONS
 from bean_ai_backend.agent.tools import CAPABILITY_TYPES
 from bean_ai_backend.config import settings
 
@@ -17,9 +18,9 @@ GOOD = """\
 default: ops
 agents:
   ops:
-    instructions: Help with ops.
+    description: Helps with ops.
   eng:
-    instructions: Help with code.
+    description: Helps with code.
     capabilities: [RepoFiles]
 """
 
@@ -37,6 +38,7 @@ def test_bundled_file_is_valid() -> None:
     assert agents.default == "bean"
     assert set(agents.agents) == {"bean", "engineering"}
     agents.check_capabilities(get_capability_registry(CAPABILITY_TYPES))
+    agents.check_instructions(INSTRUCTIONS)
 
 
 def test_default_override(agents_file: Path) -> None:
@@ -49,14 +51,18 @@ def test_default_override(agents_file: Path) -> None:
     [
         (GOOD.replace("default: ops", "default: nope"), "default agent 'nope'"),
         (
-            GOOD.replace("    instructions: Help with ops.\n", "    model: x\n"),
+            GOOD.replace("    description: Helps with ops.\n", "    model: x\n"),
             "`model` can't be set here",
         ),
         (
+            GOOD.replace("    description: Helps with ops.\n", "    instructions: x\n"),
+            "`instructions` can't be set here",
+        ),
+        (
             GOOD.replace(
-                "    instructions: Help with ops.\n", "    instructionz: typo\n"
+                "    description: Helps with ops.\n", "    descriptionz: typo\n"
             ),
-            "instructionz",
+            "descriptionz",
         ),
         ("default: x\nagents: {}\n", "agents"),
         ("- just\n- a list\n", "must be a mapping"),
@@ -76,6 +82,12 @@ def test_unknown_capability_is_named(agents_file: Path) -> None:
     agents = load_agents()
     with pytest.raises(AgentsFileError, match="eng: RepoFile"):
         agents.check_capabilities(get_capability_registry(CAPABILITY_TYPES))
+
+
+def test_agent_without_instructions_is_named(agents_file: Path) -> None:
+    agents_file.write_text(GOOD)
+    with pytest.raises(AgentsFileError, match="for: ops, eng"):
+        load_agents().check_instructions(INSTRUCTIONS)
 
 
 def test_engineering_agent_refuses_to_run_without_repo_root(

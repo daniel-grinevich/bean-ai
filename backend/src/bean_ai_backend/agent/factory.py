@@ -12,11 +12,14 @@ from pydantic_ai.settings import ModelSettings
 
 from ..config import agents, registry, settings
 from .errors import AgentUnavailable
+from .instructions import INSTRUCTIONS
 from .registry import KEY_ENV_VARS, ModelEntry
 from .tools import CAPABILITY_TYPES
 
-# Checked at import, so a misspelled capability in agents.yaml stops the server at startup.
+# Checked at import, so a misspelled capability or an agent without instructions stops the server
+# at startup.
 agents.check_capabilities(get_capability_registry(CAPABILITY_TYPES))
+agents.check_instructions(INSTRUCTIONS)
 
 
 class MissingApiKey(AgentUnavailable):
@@ -60,6 +63,7 @@ def get_agent(agent_id: str, model_id: str) -> Agent[None, str]:
             agent_entry,
             model=model,
             name=agent_id,
+            instructions=INSTRUCTIONS[agent_id],
             custom_capability_types=CAPABILITY_TYPES,
         )
     except ValueError as e:

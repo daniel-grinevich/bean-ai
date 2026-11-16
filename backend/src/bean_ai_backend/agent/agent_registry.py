@@ -21,6 +21,10 @@ class AgentEntry(AgentSpec):
             raise ValueError(
                 "`model` can't be set here: the model is picked per chat from models.yaml"
             )
+        if self.instructions is not None:
+            raise ValueError(
+                "`instructions` can't be set here: they live in agent/instructions.py"
+            )
         return self
 
 
@@ -52,6 +56,14 @@ class AgentRegistry(BaseModel):
         if unknown:
             raise AgentsFileError(
                 f"Unknown capabilities in the agents file: {', '.join(unknown)}"
+            )
+
+    def check_instructions(self, known: Container[str]) -> None:
+        """Raise AgentsFileError if an agent has no entry in `known` (agent/instructions.py)."""
+        missing = [agent_id for agent_id in self.agents if agent_id not in known]
+        if missing:
+            raise AgentsFileError(
+                f"No instructions in agent/instructions.py for: {', '.join(missing)}"
             )
 
 
