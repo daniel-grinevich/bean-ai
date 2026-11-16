@@ -48,16 +48,19 @@ def build_model(entry: ModelEntry) -> Model:
 # setting and restarting is all it takes.
 @cache
 def get_agent(agent_id: str, model_id: str) -> Agent[None, str]:
-    spec = agents.get(agent_id)
-    if spec is None:
+    agent_entry = agents.get(agent_id)
+    if agent_entry is None:
         raise KeyError(agent_id)
-    entry = registry.get(model_id)
-    if entry is None:
+    model_entry = registry.get(model_id)
+    if model_entry is None:
         raise KeyError(model_id)
-    model = build_model(entry)
+    model = build_model(model_entry)
     try:
         agent = Agent.from_spec(
-            spec, model=model, name=agent_id, custom_capability_types=CAPABILITY_TYPES
+            agent_entry,
+            model=model,
+            name=agent_id,
+            custom_capability_types=CAPABILITY_TYPES,
         )
     except ValueError as e:
         # Pydantic AI wraps errors raised while building a capability; re-raise ours so the user sees the reason.
