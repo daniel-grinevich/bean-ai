@@ -5,11 +5,14 @@ from pydantic_ai.agent.spec import get_capability_registry
 from pydantic_ai.models.test import TestModel
 
 from bean_ai_backend.agent import agent_registry
-from bean_ai_backend.agent.agent_registry import AgentsFileError, load_agents
+from bean_ai_backend.agent.agent_registry import (
+    AgentsFileError,
+    load_agents,
+    load_instructions,
+)
 from bean_ai_backend.agent.deps import AgentDeps
 from bean_ai_backend.agent.errors import AgentUnavailable
 from bean_ai_backend.agent.factory import get_agent
-from bean_ai_backend.agent.instructions import INSTRUCTIONS
 from bean_ai_backend.agent.tools import CAPABILITY_TYPES
 from bean_ai_backend.config import settings
 from bean_ai_backend.repos import LocalRepoSource
@@ -40,7 +43,7 @@ def test_bundled_file_is_valid() -> None:
     assert agents.default == "bean"
     assert set(agents.agents) == {"bean", "engineering"}
     agents.check_capabilities(get_capability_registry(CAPABILITY_TYPES))
-    agents.check_instructions(INSTRUCTIONS)
+    assert set(load_instructions(agents.agents)) == {"bean", "engineering"}
 
 
 def test_default_override(agents_file: Path) -> None:
@@ -86,10 +89,16 @@ def test_unknown_capability_is_named(agents_file: Path) -> None:
         agents.check_capabilities(get_capability_registry(CAPABILITY_TYPES))
 
 
-def test_agent_without_instructions_is_named(agents_file: Path) -> None:
-    agents_file.write_text(GOOD)
-    with pytest.raises(AgentsFileError, match="for: ops, eng"):
-        load_agents().check_instructions(INSTRUCTIONS)
+def test_agent_without_instructions_is_named(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(agent_registry, "INSTRUCTIONS_DIR", tmp_path)
+    (tmp_path / "ops.md").write_text("Help with ops.")
+    (tmp_path / "eng.md").write_text("  \n")
+    (tmp_path / "other.md").write_text("Not an agent.")
+
+    with pytest.raises(AgentsFileError, match=r"instructions in .*: eng\.md, new\.md$"):
+        load_instructions(["ops", "eng", "new"])
 
 
 def test_engineering_agent_refuses_to_run_without_a_repository(

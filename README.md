@@ -141,7 +141,7 @@ agent/              models, agents and their capabilities
   registry.py       loads and validates models.yaml; maps each provider to its key env var
   agents.yaml       the agent list (one Pydantic AI AgentSpec per agent)
   agent_registry.py loads and validates agents.yaml
-  instructions.py   system instructions per agent id
+  instructions/     system instructions, one <agent id>.md per agent
   factory.py        build_model() (provider -> AnthropicModel or OpenRouterModel), one cached agent per (agent, model)
   deps.py           AgentDeps: what each run brings (the repository), passed as `deps=` per chat turn
   errors.py         AgentUnavailable: an agent can't run (missing key, no repository); shown to the user
@@ -153,8 +153,8 @@ repos/              repositories agents read, behind one RepoSource protocol
 ```
 
 Routers return schemas, never the store's internal dataclasses. Agents are defined in `backend/src/bean_ai_backend/agent/agents.yaml`
-(a description plus a list of capabilities); each agent's instructions live in `agent/instructions.py`
-under the same id. To add tools, write them in a `FunctionToolset`, wrap it in an
+(a description plus a list of capabilities); each agent's instructions live in
+`agent/instructions/<id>.md`. To add tools, write them in a `FunctionToolset`, wrap it in an
 `AbstractCapability` subclass (see `RepoFiles`), add the class to `CAPABILITY_TYPES`, and name it under an agent's
 `capabilities`. The OpenAPI schema is pinned by
 `tests/snapshots/openapi.json` (`tests/test_openapi.py`); regenerate it when the API changes on purpose.

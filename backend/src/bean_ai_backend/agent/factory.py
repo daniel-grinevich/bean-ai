@@ -11,16 +11,16 @@ from pydantic_ai.providers.openrouter import OpenRouterProvider
 from pydantic_ai.settings import ModelSettings
 
 from ..config import agents, registry, settings
+from .agent_registry import load_instructions
 from .deps import AgentDeps
 from .errors import AgentUnavailable
-from .instructions import INSTRUCTIONS
 from .registry import KEY_ENV_VARS, ModelEntry
 from .tools import CAPABILITY_TYPES
 
 # Checked at import, so a misspelled capability or an agent without instructions stops the server
 # at startup.
 agents.check_capabilities(get_capability_registry(CAPABILITY_TYPES))
-agents.check_instructions(INSTRUCTIONS)
+INSTRUCTIONS = load_instructions(agents.agents)
 
 
 class MissingApiKey(AgentUnavailable):

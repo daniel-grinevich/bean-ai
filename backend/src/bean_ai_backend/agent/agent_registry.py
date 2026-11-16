@@ -1,4 +1,4 @@
-from collections.abc import Container
+from collections.abc import Container, Iterable
 from pathlib import Path
 
 import yaml
@@ -23,7 +23,7 @@ class AgentEntry(AgentSpec):
             )
         if self.instructions is not None:
             raise ValueError(
-                "`instructions` can't be set here: they live in agent/instructions.py"
+                "`instructions` can't be set here: they live in agent/instructions/<id>.md"
             )
         return self
 
@@ -58,14 +58,6 @@ class AgentRegistry(BaseModel):
                 f"Unknown capabilities in the agents file: {', '.join(unknown)}"
             )
 
-    def check_instructions(self, known: Container[str]) -> None:
-        """Raise AgentsFileError if an agent has no entry in `known` (agent/instructions.py)."""
-        missing = [agent_id for agent_id in self.agents if agent_id not in known]
-        if missing:
-            raise AgentsFileError(
-                f"No instructions in agent/instructions.py for: {', '.join(missing)}"
-            )
-
 
 # Ships inside the package, so it's the same file in a checkout and in the image.
 AGENTS_FILE = Path(__file__).with_name("agents.yaml")
@@ -96,3 +88,25 @@ def load_agents(default_override: str | None = None) -> AgentRegistry:
             else AGENTS_FILE
         )
         raise AgentsFileError(f"Invalid agents file {source}:\n{e}") from e
+
+
+# One file per agent, named by its id: instructions/bean.md, instructions/engineering.md, ...
+INSTRUCTIONS_DIR = Path(__file__).with_name("instructions")
+
+
+def load_instructions(agent_ids: Iterable[str]) -> dict[str, str]:
+    """Read each agent's instructions file. Raises AgentsFileError naming any that are missing or empty."""
+    instructions: dict[str, str] = {}
+    missing: list[str] = []
+    for agent_id in agent_ids:
+        path = INSTRUCTIONS_DIR / f"{agent_id}.md"
+        text = path.read_text() if path.is_file() else ""
+        if text.strip():
+            instructions[agent_id] = text
+        else:
+            missing.append(f"{agent_id}.md")
+    if missing:
+        raise AgentsFileError(
+            f"Missing or empty instructions in {INSTRUCTIONS_DIR}: {', '.join(missing)}"
+        )
+    return instructions
