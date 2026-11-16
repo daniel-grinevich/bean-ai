@@ -117,12 +117,12 @@ def test_unknown_agent_is_422(client: TestClient) -> None:
     assert "Unknown agent" in res.text
 
 
-@pytest.mark.parametrize("agent_id", [None, "engineering"])
+@pytest.mark.parametrize("agent_id", [None, "senior-dev-daniel"])
 def test_chat_uses_requested_agent(
     agent_id: str | None, client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
-    # The engineering agent refuses to run without a repository, so its error event proves it was picked.
+    # Senior Dev Daniel refuses to run without a repository, so its error event proves it was picked.
     with get_agent(agents.default, registry.default).override(
         model=FunctionModel(stream_function=echo)
     ):

@@ -90,7 +90,7 @@ def load_agents(default_override: str | None = None) -> AgentRegistry:
         raise AgentsFileError(f"Invalid agents file {source}:\n{e}") from e
 
 
-# One file per agent, named by its id: instructions/bean.md, instructions/engineering.md, ...
+# One file per agent, named by its id: instructions/bean.md, instructions/senior-dev-daniel.md, ...
 INSTRUCTIONS_DIR = Path(__file__).with_name("instructions")
 
 

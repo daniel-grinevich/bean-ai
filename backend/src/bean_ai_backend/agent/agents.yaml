@@ -15,7 +15,7 @@ agents:
     description: Operations assistant for the Navi coffee machine fleet.
     capabilities: []
 
-  engineering:
+  senior-dev-daniel:
     description: Answers questions about the Bean AI codebase by reading its files.
     capabilities:
       - RepoFiles

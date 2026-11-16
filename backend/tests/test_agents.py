@@ -41,9 +41,9 @@ def agents_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def test_bundled_file_is_valid() -> None:
     agents = load_agents()
     assert agents.default == "bean"
-    assert set(agents.agents) == {"bean", "engineering"}
+    assert set(agents.agents) == {"bean", "senior-dev-daniel"}
     agents.check_capabilities(get_capability_registry(CAPABILITY_TYPES))
-    assert set(load_instructions(agents.agents)) == {"bean", "engineering"}
+    assert set(load_instructions(agents.agents)) == {"bean", "senior-dev-daniel"}
 
 
 def test_default_override(agents_file: Path) -> None:
@@ -101,11 +101,11 @@ def test_agent_without_instructions_is_named(
         load_instructions(["ops", "eng", "new"])
 
 
-def test_engineering_agent_refuses_to_run_without_a_repository(
+def test_senior_dev_daniel_refuses_to_run_without_a_repository(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
-    agent = get_agent("engineering", CLAUDE)
+    agent = get_agent("senior-dev-daniel", CLAUDE)
     with (
         agent.override(model=TestModel()),
         pytest.raises(AgentUnavailable, match="No repository is selected"),
@@ -113,12 +113,12 @@ def test_engineering_agent_refuses_to_run_without_a_repository(
         agent.run_sync("hi", deps=AgentDeps())
 
 
-def test_engineering_agent_gets_the_repo_tools(
+def test_senior_dev_daniel_gets_the_repo_tools(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
     model = TestModel(call_tools=[])
-    agent = get_agent("engineering", CLAUDE)
+    agent = get_agent("senior-dev-daniel", CLAUDE)
 
     with agent.override(model=model):
         agent.run_sync("hi", deps=AgentDeps(repo=LocalRepoSource(tmp_path)))
