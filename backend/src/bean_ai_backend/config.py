@@ -21,9 +21,12 @@ class Settings(BaseSettings):
     # Optional override of the default agent in agents.yaml; must be one of its ids.
     default_agent: str | None = None
     cors_origins: list[str] = ["http://localhost:5173"]
-    # Logfire project write token. Unset: the server runs normally and sends no traces.
-    logfire_token: str = Field(default="", repr=False)
-    # Where this server runs; tags every trace so Logfire can separate them.
+    # OTLP/HTTP collector for traces, e.g. Phoenix at http://localhost:6006 (/v1/traces is
+    # appended). Unset: the server runs normally and sends no traces.
+    otel_exporter_otlp_endpoint: str = ""
+    # Sent as `Authorization: Bearer <key>`; needed when Phoenix has auth on.
+    phoenix_api_key: str = Field(default="", repr=False)
+    # Where this server runs; tags every trace.
     environment: Literal["local", "staging", "production"] = "local"
 
     def api_key(self, provider: Provider) -> str:

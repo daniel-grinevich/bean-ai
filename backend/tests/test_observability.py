@@ -1,31 +1,34 @@
 import logging
+import socket
+import time
 
-import logfire
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from pydantic_ai.messages import ModelMessage
+from pydantic_ai import Agent, InstrumentationSettings
+from pydantic_ai.capabilities import Instrumentation
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
+from bean_ai_backend import main
 from bean_ai_backend.agent.factory import get_agent
 from bean_ai_backend.config import agents, registry, settings
-from bean_ai_backend.main import app
-from bean_ai_backend.observability import setup_observability
+from bean_ai_backend.observability import build_tracer_provider, setup_tracing
 
 
 async def echo(messages: list[ModelMessage], info: AgentInfo):
     yield "hi"
 
 
-def test_app_starts_and_serves_a_chat_without_a_token(
+def test_app_starts_and_serves_a_chat_without_an_endpoint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
-    assert logfire.DEFAULT_LOGFIRE_INSTANCE.config.send_to_logfire is False
+    assert main.tracer_provider is None
 
     agent = get_agent(agents.default, registry.default)
     with (
-        TestClient(app) as client,
+        TestClient(main.app) as client,
         agent.override(model=FunctionModel(stream_function=echo)),
     ):
         res = client.post("/api/chat", json={"message": "hello"})
@@ -34,11 +37,38 @@ def test_app_starts_and_serves_a_chat_without_a_token(
     assert res.text.rstrip().endswith("event: done\ndata: {}")
 
 
-def test_warns_once_that_traces_are_off(caplog: pytest.LogCaptureFixture) -> None:
+def test_warns_once_that_tracing_is_off(caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.WARNING, logger="bean"):
-        setup_observability(FastAPI())
+        assert setup_tracing(FastAPI()) is None
 
     [warning] = [r.getMessage() for r in caplog.records if r.name == "bean"]
-    assert warning.startswith(
-        "Traces are off: neither LOGFIRE_TOKEN nor OTEL_EXPORTER_OTLP"
+    assert warning.startswith("Tracing is off: OTEL_EXPORTER_OTLP_ENDPOINT is not set")
+
+
+def test_runs_finish_and_export_errors_are_logged_when_the_collector_is_down(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A local port nothing listens on, so the export is refused and nothing is sent.
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        closed_port = s.getsockname()[1]
+    # Give up retrying after 1s.
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_TRACES_TIMEOUT", "1")
+    provider = build_tracer_provider(f"http://127.0.0.1:{closed_port}")
+    agent = Agent(
+        FunctionModel(lambda m, i: ModelResponse(parts=[TextPart("ok")])),
+        capabilities=[
+            Instrumentation(InstrumentationSettings(tracer_provider=provider))
+        ],
+    )
+
+    start = time.monotonic()
+    assert agent.run_sync("hello").output == "ok"
+    assert time.monotonic() - start < 0.5  # the export doesn't run on the request path
+
+    with caplog.at_level(logging.WARNING):
+        provider.shutdown()  # flushes the batch: the export fails here, in the background thread
+    assert any(
+        r.levelno == logging.ERROR and "Failed to export" in r.getMessage()
+        for r in caplog.records
     )

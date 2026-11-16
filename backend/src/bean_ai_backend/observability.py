@@ -1,41 +1,64 @@
 import logging
-import os
 
-import logfire
 from fastapi import FastAPI
+from openinference.instrumentation.pydantic_ai import OpenInferenceSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from pydantic_ai import Agent, InstrumentationSettings
 
 from .config import settings
 
 logger = logging.getLogger("bean")
 
 
-def setup_observability(app: FastAPI) -> None:
-    """Trace HTTP requests and agent runs. Call once, when the app is built.
-
-    Traces go to Logfire when LOGFIRE_TOKEN is set, and to any OpenTelemetry backend named by
-    OTEL_EXPORTER_OTLP_ENDPOINT; both can be on. Fails open: with neither, the app runs normally
-    and sends nothing.
-    """
-    token = settings.logfire_token
-    logfire.configure(
-        # Only LOGFIRE_TOKEN turns on sending to Logfire. 'if-token-present' would also pick up a .logfire/
-        # credentials file or LOGFIRE_API_KEY, so "no token" wouldn't reliably mean "nothing sent".
-        send_to_logfire=bool(token),
-        token=token or None,
-        service_name="bean-ai",
-        environment=settings.environment,
-        # uvicorn already logs requests; don't also print every span to stdout.
-        console=False,
-    )
-    # configure() must come before the instrument_* calls, or their spans go nowhere.
-    logfire.instrument_pydantic_ai()
-    logfire.instrument_fastapi(app, excluded_urls="/api/health")
-    # configure() also exports to any OTLP backend named by the standard OTel env vars.
-    otlp = os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") or os.getenv(
-        "OTEL_EXPORTER_OTLP_ENDPOINT"
-    )
-    if not token and not otlp:
-        logger.warning(
-            "Traces are off: neither LOGFIRE_TOKEN nor OTEL_EXPORTER_OTLP_ENDPOINT is set, "
-            "so nothing is sent."
+def build_tracer_provider(endpoint: str, api_key: str = "") -> TracerProvider:
+    """Traces that export over OTLP/HTTP to `endpoint` (e.g. Phoenix at http://localhost:6006)."""
+    provider = TracerProvider(
+        resource=Resource.create(
+            {
+                "service.name": "bean-ai",
+                "deployment.environment.name": settings.environment,
+                # The Phoenix project the traces land in.
+                "openinference.project.name": "bean-ai",
+            }
         )
+    )
+    # Rewrites Pydantic AI's OTel GenAI spans into OpenInference attributes, which is what
+    # Phoenix reads to show agent, model and tool spans with their messages and token counts.
+    provider.add_span_processor(OpenInferenceSpanProcessor())
+    exporter = OTLPSpanExporter(
+        endpoint=f"{endpoint.rstrip('/')}/v1/traces",
+        headers={"Authorization": f"Bearer {api_key}"} if api_key else None,
+    )
+    # Exports from a background thread: a down collector logs an error, it never blocks a request.
+    provider.add_span_processor(BatchSpanProcessor(exporter))
+    return provider
+
+
+def setup_tracing(app: FastAPI) -> TracerProvider | None:
+    """Trace HTTP requests and every agent run. Call once, when the app is built.
+
+    Fails open: without OTEL_EXPORTER_OTLP_ENDPOINT the app runs normally and sends nothing.
+    """
+    endpoint = settings.otel_exporter_otlp_endpoint
+    if not endpoint:
+        logger.warning(
+            "Tracing is off: OTEL_EXPORTER_OTLP_ENDPOINT is not set, so no traces are sent."
+        )
+        return None
+    provider = build_tracer_provider(endpoint, settings.phoenix_api_key)
+    # Prompts, instructions, outputs and tool data are recorded: the collector is self-hosted.
+    Agent.instrument_all(
+        InstrumentationSettings(tracer_provider=provider, include_content=True)
+    )
+    FastAPIInstrumentor.instrument_app(
+        app,
+        tracer_provider=provider,
+        excluded_urls="/api/health",
+        # One span per request, not one per streamed SSE chunk.
+        exclude_spans=["send", "receive"],
+    )
+    return provider

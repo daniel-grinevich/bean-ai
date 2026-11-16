@@ -1,5 +1,3 @@
-import os
-
 import pytest
 from fastapi.testclient import TestClient
 from pydantic_ai import models
@@ -7,12 +5,9 @@ from pydantic_ai import models
 from bean_ai_backend.agent.factory import get_agent
 from bean_ai_backend.config import settings
 
-# Tests never send traces anywhere, even with LOGFIRE_TOKEN in the shell or backend/.env, or an
-# OTLP endpoint in the shell. This runs before any test module imports bean_ai_backend.main,
-# which is where tracing is configured.
-settings.logfire_token = ""
-for name in ("OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"):
-    os.environ.pop(name, None)
+# Tests never send traces, even with OTEL_EXPORTER_OTLP_ENDPOINT in the shell or backend/.env.
+# This runs before any test module imports bean_ai_backend.main, which is where tracing is set up.
+settings.otel_exporter_otlp_endpoint = ""
 # Tests never reach a real model; anything that tries fails loudly.
 models.ALLOW_MODEL_REQUESTS = False
 
