@@ -7,7 +7,7 @@
 #   description   what the agent is for (an orchestrator will read this to pick an agent)
 #   capabilities  what it can do: Pydantic AI built-ins (WebSearch, Thinking, ...) or ours, listed in
 #                 agent/tools/__init__.py (RepoFiles, ...). An agent whose capability can't be set up
-#                 here (e.g. RepoFiles without REPO_ROOT) fails with that reason when picked; the rest still work.
+#                 here (e.g. RepoFiles with no repository) fails with that reason when picked; the rest still work.
 
 default: bean
 agents:

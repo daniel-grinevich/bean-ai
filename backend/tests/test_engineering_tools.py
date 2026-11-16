@@ -13,7 +13,10 @@ from pydantic_ai.messages import (
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
 
-from bean_ai_backend.agent.tools.engineering import MAX_BYTES, repo_file_toolset
+from bean_ai_backend.agent.deps import AgentDeps
+from bean_ai_backend.agent.errors import AgentUnavailable
+from bean_ai_backend.agent.tools.engineering import MAX_BYTES, RepoFiles
+from bean_ai_backend.repos import LocalRepoSource
 
 pytestmark = pytest.mark.anyio
 
@@ -31,15 +34,18 @@ async def call_read_repo_file(root: Path, path: str) -> ModelRequestPart:
             return ModelResponse(parts=[ToolCallPart("read_repo_file", {"path": path})])
         return ModelResponse(parts=[TextPart("done")])
 
-    agent = Agent(FunctionModel(model), toolsets=[repo_file_toolset(root)])
-    result = await agent.run("read the file")
+    agent = Agent(FunctionModel(model), deps_type=AgentDeps, capabilities=[RepoFiles()])
+    result = await agent.run(
+        "read the file", deps=AgentDeps(repo=LocalRepoSource(root))
+    )
     # messages: [user prompt, tool call, tool result, final text]
     return result.all_messages()[2].parts[0]
 
 
 async def test_model_sees_docstring_as_tool_description(tmp_path: Path) -> None:
     model = TestModel(call_tools=[])
-    await Agent(model, toolsets=[repo_file_toolset(tmp_path)]).run("hi")
+    agent = Agent(model, deps_type=AgentDeps, capabilities=[RepoFiles()])
+    await agent.run("hi", deps=AgentDeps(repo=LocalRepoSource(tmp_path)))
 
     [tool] = model.last_model_request_parameters.function_tools
     assert tool.name == "read_repo_file"
@@ -48,6 +54,17 @@ async def test_model_sees_docstring_as_tool_description(tmp_path: Path) -> None:
         "relative to the repository root"
         in tool.parameters_json_schema["properties"]["path"]["description"]
     )
+
+
+async def test_refuses_to_run_without_a_repository() -> None:
+    model = TestModel(call_tools=[])
+    agent = Agent(model, deps_type=AgentDeps, capabilities=[RepoFiles()])
+
+    with pytest.raises(AgentUnavailable, match="No repository is selected"):
+        await agent.run("hi", deps=AgentDeps())
+    assert (
+        model.last_model_request_parameters is None
+    )  # refused before any model request
 
 
 async def test_reads_a_file(tmp_path: Path) -> None:

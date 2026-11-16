@@ -75,7 +75,6 @@ docker run -d --network bean -p 8080:80 ghcr.io/daniel-grinevich/bean-ai-fronten
 | `MODELS_FILE`       | backend  | `models.yaml` (working dir) | The model list. In the image: `/app/models.yaml`.           |
 | `AGENT_MODEL`       | backend  | (unset)                     | Overrides `default` in the models file; must be in the list. |
 | `DEFAULT_AGENT`     | backend  | (unset)                     | Overrides `default` in the agents file; must be in the list. |
-| `REPO_ROOT`         | backend  | (unset)                     | Checkout the `RepoFiles` capability reads. Unset: agents using it refuse to run. |
 | `CORS_ORIGINS`      | backend  | `["http://localhost:5173"]` | Only needed when not using a proxy.                         |
 | `VITE_API_TARGET`   | frontend | `http://localhost:8000`     | Dev proxy target for `/api`.                                |
 | `VITE_PORT`         | frontend | `5173`                      | Dev server port.                                            |
@@ -144,9 +143,13 @@ agent/              models, agents and their capabilities
   agent_registry.py loads and validates agents.yaml
   instructions.py   system instructions per agent id
   factory.py        build_model() (provider -> AnthropicModel or OpenRouterModel), one cached agent per (agent, model)
-  errors.py         AgentUnavailable: an agent can't run here (missing key, unset REPO_ROOT); shown to the user
+  deps.py           AgentDeps: what each run brings (the repository), passed as `deps=` per chat turn
+  errors.py         AgentUnavailable: an agent can't run (missing key, no repository); shown to the user
   tools/            our capabilities; CAPABILITY_TYPES in __init__.py lists the ones agents.yaml can name
-    engineering.py  RepoFiles: the read_repo_file tool over REPO_ROOT
+    engineering.py  RepoFiles: the read_repo_file tool over the run's repository (deps.repo)
+repos/              repositories agents read, behind one RepoSource protocol
+  base.py           RepoSource, RepoError, repo_path() (the path rules every source applies)
+  local.py          LocalRepoSource: a checkout on this machine (a Forgejo source comes later)
 ```
 
 Routers return schemas, never the store's internal dataclasses. Agents are defined in `backend/src/bean_ai_backend/agent/agents.yaml`

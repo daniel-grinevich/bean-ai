@@ -19,8 +19,6 @@ class Settings(BaseSettings):
     agent_model: str | None = None
     # Optional override of the default agent in agents.yaml; must be one of its ids.
     default_agent: str | None = None
-    # The checkout the RepoFiles capability reads. No default: unset, agents with RepoFiles refuse to run.
-    repo_root: Path | None = None
     cors_origins: list[str] = ["http://localhost:5173"]
 
     def api_key(self, provider: Provider) -> str:

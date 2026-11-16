@@ -6,11 +6,13 @@ from pydantic_ai.models.test import TestModel
 
 from bean_ai_backend.agent import agent_registry
 from bean_ai_backend.agent.agent_registry import AgentsFileError, load_agents
+from bean_ai_backend.agent.deps import AgentDeps
 from bean_ai_backend.agent.errors import AgentUnavailable
 from bean_ai_backend.agent.factory import get_agent
 from bean_ai_backend.agent.instructions import INSTRUCTIONS
 from bean_ai_backend.agent.tools import CAPABILITY_TYPES
 from bean_ai_backend.config import settings
+from bean_ai_backend.repos import LocalRepoSource
 
 CLAUDE = "claude-sonnet-5"
 
@@ -90,23 +92,27 @@ def test_agent_without_instructions_is_named(agents_file: Path) -> None:
         load_agents().check_instructions(INSTRUCTIONS)
 
 
-def test_engineering_agent_refuses_to_run_without_repo_root(
+def test_engineering_agent_refuses_to_run_without_a_repository(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
-    with pytest.raises(AgentUnavailable, match="REPO_ROOT is not set"):
-        get_agent("engineering", CLAUDE)
+    agent = get_agent("engineering", CLAUDE)
+    with (
+        agent.override(model=TestModel()),
+        pytest.raises(AgentUnavailable, match="No repository is selected"),
+    ):
+        agent.run_sync("hi", deps=AgentDeps())
 
 
 def test_engineering_agent_gets_the_repo_tools(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
-    monkeypatch.setattr(settings, "repo_root", tmp_path)
     model = TestModel(call_tools=[])
+    agent = get_agent("engineering", CLAUDE)
 
-    with get_agent("engineering", CLAUDE).override(model=model):
-        get_agent("engineering", CLAUDE).run_sync("hi")
+    with agent.override(model=model):
+        agent.run_sync("hi", deps=AgentDeps(repo=LocalRepoSource(tmp_path)))
 
     assert [t.name for t in model.last_model_request_parameters.function_tools] == [
         "read_repo_file"
@@ -118,6 +124,6 @@ def test_bean_agent_has_no_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     model = TestModel(call_tools=[])
 
     with get_agent("bean", CLAUDE).override(model=model):
-        get_agent("bean", CLAUDE).run_sync("hi")
+        get_agent("bean", CLAUDE).run_sync("hi", deps=AgentDeps())
 
     assert model.last_model_request_parameters.function_tools == []

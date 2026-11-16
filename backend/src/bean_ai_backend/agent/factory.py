@@ -11,6 +11,7 @@ from pydantic_ai.providers.openrouter import OpenRouterProvider
 from pydantic_ai.settings import ModelSettings
 
 from ..config import agents, registry, settings
+from .deps import AgentDeps
 from .errors import AgentUnavailable
 from .instructions import INSTRUCTIONS
 from .registry import KEY_ENV_VARS, ModelEntry
@@ -47,10 +48,10 @@ def build_model(entry: ModelEntry) -> Model:
 
 
 # One Agent per (agent, model) pair, built on first use so the server can start (and /api/health works)
-# without keys. AgentUnavailable (a missing key, an unset REPO_ROOT) raises before caching, so fixing the
-# setting and restarting is all it takes.
+# without keys. A missing key raises before caching, so fixing the setting and restarting is all it takes.
+# Agents are shared by every chat; what differs per run (the repository) comes in as AgentDeps.
 @cache
-def get_agent(agent_id: str, model_id: str) -> Agent[None, str]:
+def get_agent(agent_id: str, model_id: str) -> Agent[AgentDeps, str]:
     agent_entry = agents.get(agent_id)
     if agent_entry is None:
         raise KeyError(agent_id)
@@ -58,17 +59,12 @@ def get_agent(agent_id: str, model_id: str) -> Agent[None, str]:
     if model_entry is None:
         raise KeyError(model_id)
     model = build_model(model_entry)
-    try:
-        agent = Agent.from_spec(
-            agent_entry,
-            model=model,
-            name=agent_id,
-            instructions=INSTRUCTIONS[agent_id],
-            custom_capability_types=CAPABILITY_TYPES,
-        )
-    except ValueError as e:
-        # Pydantic AI wraps errors raised while building a capability; re-raise ours so the user sees the reason.
-        if isinstance(e.__cause__, AgentUnavailable):
-            raise e.__cause__ from None
-        raise
-    return cast(Agent[None, str], agent)
+    agent = Agent.from_spec(
+        agent_entry,
+        model=model,
+        name=agent_id,
+        instructions=INSTRUCTIONS[agent_id],
+        deps_type=AgentDeps,
+        custom_capability_types=CAPABILITY_TYPES,
+    )
+    return cast(Agent[AgentDeps, str], agent)

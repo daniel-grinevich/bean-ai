@@ -1,5 +1,5 @@
 class AgentUnavailable(RuntimeError):
-    """The agent can't be built in this environment (an API key or path isn't configured).
+    """The agent can't run: an API key isn't configured, or the run lacks what it needs (a repository).
 
-    The message is shown to the user as-is, so say what's missing and which setting fixes it.
+    The message is shown to the user as-is, so say what's missing and how to fix it.
     """

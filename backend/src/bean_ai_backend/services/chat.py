@@ -2,6 +2,7 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
+from ..agent.deps import AgentDeps
 from ..agent.errors import AgentUnavailable
 from ..agent.factory import get_agent
 from .store import Conversation, ConversationStore
@@ -31,7 +32,12 @@ async def run_turn(
     try:
         agent = get_agent(agent_id, model_id)
         reply = ""
-        async with agent.run_stream(message, message_history=conv.history) as result:
+        # No repository yet: picking one per conversation (and checking the user may) comes later,
+        # so agents with RepoFiles refuse to run for now.
+        deps = AgentDeps()
+        async with agent.run_stream(
+            message, message_history=conv.history, deps=deps
+        ) as result:
             async for delta in result.stream_text(delta=True, debounce_by=None):
                 reply += delta
                 yield "delta", {"text": delta}
