@@ -8,7 +8,7 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.openrouter import OpenRouterModel
 
 from bean_ai_backend.agent.factory import MissingApiKey, build_model, get_agent
-from bean_ai_backend.config import registry, settings
+from bean_ai_backend.config import agents, registry, settings
 from bean_ai_backend.services.store import store
 
 CLAUDE = "claude-sonnet-5"
@@ -59,7 +59,7 @@ def test_build_model_routes_by_provider(monkeypatch: pytest.MonkeyPatch) -> None
 @pytest.mark.parametrize(("model_id", "env_var"), [(CLAUDE, "ANTHROPIC_API_KEY"), (DEEPSEEK, "OPEN_ROUTER_KEY")])
 def test_missing_key_names_the_right_variable(model_id: str, env_var: str, client: TestClient) -> None:
     with pytest.raises(MissingApiKey, match=env_var):
-        get_agent(model_id)
+        get_agent(agents.default, model_id)
     res = client.post("/api/chat", json={"message": "hello", "model": model_id})
     assert events(res.text)[-1] == (
         "error",
@@ -81,7 +81,7 @@ def test_chat_uses_requested_model_and_records_it(
     monkeypatch.setattr(settings, "open_router_key", "test-key")
     expected = model_id or registry.default
     # Fail if the wrong agent is used: only the expected one gets the fake model.
-    with get_agent(expected).override(model=FunctionModel(stream_function=echo)):
+    with get_agent(agents.default, expected).override(model=FunctionModel(stream_function=echo)):
         res = client.post("/api/chat", json={"message": "hello", "model": model_id})
     evs = events(res.text)
     assert evs[0][1]["model"] == expected

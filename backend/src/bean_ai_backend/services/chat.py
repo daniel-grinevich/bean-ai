@@ -2,7 +2,8 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
-from ..agent.factory import MissingApiKey, get_agent
+from ..agent.errors import AgentUnavailable
+from ..agent.factory import get_agent
 from .store import Conversation, ConversationStore
 
 logger = logging.getLogger("bean")
@@ -17,10 +18,12 @@ def open_conversation(store: ConversationStore, conversation_id: str | None, mes
 
 
 # Runs one turn: start → delta… → done, or error.
-async def run_turn(store: ConversationStore, conv: Conversation, message: str, model_id: str) -> AsyncIterator[Event]:
+async def run_turn(
+    store: ConversationStore, conv: Conversation, message: str, agent_id: str, model_id: str
+) -> AsyncIterator[Event]:
     yield "start", {"conversation_id": conv.id, "model": model_id}
     try:
-        agent = get_agent(model_id)
+        agent = get_agent(agent_id, model_id)
         reply = ""
         async with agent.run_stream(message, message_history=conv.history) as result:
             async for delta in result.stream_text(delta=True, debounce_by=None):
@@ -29,7 +32,7 @@ async def run_turn(store: ConversationStore, conv: Conversation, message: str, m
         # Only completed turns are saved; if the client stops mid-reply, nothing is recorded.
         store.record_turn(conv, message, reply, result.all_messages(), model_id)
         yield "done", {}
-    except MissingApiKey as e:
+    except AgentUnavailable as e:
         yield "error", {"message": str(e)}
     except Exception:
         logger.exception("chat run failed (conversation %s)", conv.id)

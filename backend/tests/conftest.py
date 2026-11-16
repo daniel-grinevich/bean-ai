@@ -12,9 +12,10 @@ models.ALLOW_MODEL_REQUESTS = False
 
 @pytest.fixture(autouse=True)
 def no_keys(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Start every test with no API keys (ignoring any local .env) and no cached agents."""
+    """Start every test with no API keys or REPO_ROOT (ignoring any local .env) and no cached agents."""
     monkeypatch.setattr(settings, "anthropic_api_key", "")
     monkeypatch.setattr(settings, "open_router_key", "")
+    monkeypatch.setattr(settings, "repo_root", None)
     get_agent.cache_clear()
     yield
     get_agent.cache_clear()

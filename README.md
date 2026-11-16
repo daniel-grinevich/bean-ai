@@ -74,6 +74,9 @@ docker run -d --network bean -p 8080:80 ghcr.io/daniel-grinevich/bean-ai-fronten
 | `OPEN_ROUTER_KEY`   | backend  | (none)                      | Enables the OpenRouter models (`provider: openrouter`).     |
 | `MODELS_FILE`       | backend  | `models.yaml` (working dir) | The model list. In the image: `/app/models.yaml`.           |
 | `AGENT_MODEL`       | backend  | (unset)                     | Overrides `default` in the models file; must be in the list. |
+| `AGENTS_FILE`       | backend  | `agents.yaml` (working dir) | The agent list. In the image: `/app/agents.yaml`.           |
+| `DEFAULT_AGENT`     | backend  | (unset)                     | Overrides `default` in the agents file; must be in the list. |
+| `REPO_ROOT`         | backend  | (unset)                     | Checkout the `RepoFiles` capability reads. Unset: agents using it refuse to run. |
 | `CORS_ORIGINS`      | backend  | `["http://localhost:5173"]` | Only needed when not using a proxy.                         |
 | `VITE_API_TARGET`   | frontend | `http://localhost:8000`     | Dev proxy target for `/api`.                                |
 | `VITE_PORT`         | frontend | `5173`                      | Dev server port.                                            |
@@ -122,7 +125,7 @@ stopped mid-stream isn't remembered.
 
 ```
 main.py             creates the app, CORS, includes the routers; nothing else
-config.py           settings from env vars / backend/.env, and the loaded model registry
+config.py           settings from env vars / backend/.env, and the loaded model and agent registries
 deps.py             FastAPI Depends() helpers (get_store / StoreDep)
 routers/            thin HTTP: validate, call a service, return a schema
   health.py         GET /api/health
@@ -136,14 +139,19 @@ schemas/            Pydantic request/response models (the API's shapes)
 services/           logic with no FastAPI in it; raises domain errors (ConversationNotFound)
   chat.py           runs a turn: picks the agent, streams deltas, records the completed turn
   store.py          the in-memory conversation store (Pydantic AI history + display messages)
-agent/              models and agents (tools/toolsets go here too)
+agent/              models, agents and their capabilities
   registry.py       loads and validates models.yaml; maps each provider to its key env var
-  factory.py        build_model() (provider -> AnthropicModel or OpenRouterModel), one cached agent per model
-  instructions.py   the system instructions
+  agent_registry.py loads and validates agents.yaml (one Pydantic AI AgentSpec per agent)
+  factory.py        build_model() (provider -> AnthropicModel or OpenRouterModel), one cached agent per (agent, model)
+  errors.py         AgentUnavailable: an agent can't run here (missing key, unset REPO_ROOT); shown to the user
+  tools/            our capabilities; CAPABILITY_TYPES in __init__.py lists the ones agents.yaml can name
+    engineering.py  RepoFiles: the read_repo_file tool over REPO_ROOT
 ```
 
-Routers return schemas, never the store's internal dataclasses. Add tools to the agent in `agent/factory.py` with
-`@agent.tool_plain` (or `@agent.tool` if a tool needs `RunContext`). The OpenAPI schema is pinned by
+Routers return schemas, never the store's internal dataclasses. Agents are defined in `backend/agents.yaml`
+(instructions plus a list of capabilities). To add tools, write them in a `FunctionToolset`, wrap it in an
+`AbstractCapability` subclass (see `RepoFiles`), add the class to `CAPABILITY_TYPES`, and name it under an agent's
+`capabilities`. The OpenAPI schema is pinned by
 `tests/snapshots/openapi.json` (`tests/test_openapi.py`); regenerate it when the API changes on purpose.
 
 **Frontend** (`frontend/src/`)

@@ -1,7 +1,9 @@
 # syntax=docker/dockerfile:1
 # Bean AI backend: FastAPI + Pydantic AI on uvicorn, port 8000.
 # Runtime config comes from env vars: ANTHROPIC_API_KEY and/or OPEN_ROUTER_KEY, MODELS_FILE and AGENT_MODEL (optional).
-# The model list is /app/models.yaml; mount a ConfigMap over it (or point MODELS_FILE elsewhere) to change it.
+# The model list is /app/models.yaml and the agent list /app/agents.yaml; mount a ConfigMap over either
+# (or point MODELS_FILE / AGENTS_FILE elsewhere) to change them. The image has no repo checkout, so REPO_ROOT
+# stays unset and agents with RepoFiles (engineering) report that instead of running.
 
 FROM python:3.13-slim AS build
 # uv from PyPI (pulling the ghcr.io/astral-sh/uv image is blocked on some networks).
@@ -18,7 +20,7 @@ FROM python:3.13-slim
 RUN groupadd --system --gid 10001 bean && useradd --system --uid 10001 --gid bean --no-create-home bean
 WORKDIR /app
 COPY --from=build /app/.venv /app/.venv
-COPY models.yaml ./
+COPY models.yaml agents.yaml ./
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYDANTIC_AI_NO_BANNER=1

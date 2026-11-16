@@ -11,8 +11,7 @@ from pydantic_ai import Agent, models
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 
-from bean_ai_backend.agent.instructions import INSTRUCTIONS
-from bean_ai_backend.config import registry
+from bean_ai_backend.config import agents, registry
 
 
 def sse_body(text: str) -> bytes:
@@ -85,7 +84,7 @@ async def test_claude_turns_round_trip_through_the_sdk(requests_seen: list[dict]
     )
     entry = registry.get("claude-sonnet-5")
     model = AnthropicModel(entry.model, provider=AnthropicProvider(anthropic_client=client), settings=entry.settings)
-    agent = Agent(model, instructions=INSTRUCTIONS)
+    agent = Agent.from_spec(agents.get(agents.default), model=model)
 
     # Same calls as /api/chat; the second turn sends history, so assistant messages get mapped too.
     history = []
