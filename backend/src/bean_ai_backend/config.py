@@ -24,9 +24,11 @@ class Settings(BaseSettings):
     # OTLP/HTTP collector for traces, e.g. Phoenix at http://localhost:6006 (/v1/traces is
     # appended). Unset: the server runs normally and sends no traces.
     otel_exporter_otlp_endpoint: str = ""
+    # Phoenix's base URL, e.g. http://localhost:6006; where prompt_sync pushes the instructions.
+    phoenix_url: str = ""
     # Sent as `Authorization: Bearer <key>`; needed when Phoenix has auth on.
     phoenix_api_key: str = Field(default="", repr=False)
-    # Where this server runs; tags every trace.
+    # Where this server runs; tags every trace and names the prompt version tag it runs.
     environment: Literal["local", "staging", "production"] = "local"
 
     def api_key(self, provider: Provider) -> str:
