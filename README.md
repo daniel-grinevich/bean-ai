@@ -77,8 +77,9 @@ docker run -d --network bean -p 8080:80 ghcr.io/daniel-grinevich/bean-ai-fronten
 | `DEFAULT_AGENT`     | backend  | (unset)                     | Overrides `default` in the agents file; must be in the list. |
 | `CORS_ORIGINS`      | backend  | `["http://localhost:5173"]` | Only needed when not using a proxy.                         |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | backend | (unset)            | Trace collector (Phoenix), OTLP/HTTP. Unset: no traces, one startup warning. |
+| `PHOENIX_URL`       | backend  | (unset)                     | Phoenix's base URL, for the prompt sync.                    |
 | `PHOENIX_API_KEY`   | backend  | (unset)                     | Sent as `Authorization: Bearer`; needed when Phoenix has auth on. |
-| `ENVIRONMENT`       | backend  | `local`                     | `local`, `staging` or `production`; tags every trace.       |
+| `ENVIRONMENT`       | backend  | `local`                     | `local`, `staging` or `production`; tags every trace and names the prompt tag. |
 | `VITE_API_TARGET`   | frontend | `http://localhost:8000`     | Dev proxy target for `/api`.                                |
 | `VITE_PORT`         | frontend | `5173`                      | Dev server port.                                            |
 
@@ -134,6 +135,27 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:6006
 
 Phoenix 21 turns authentication on by default; a deployed Phoenix needs an API key in `PHOENIX_API_KEY`.
 
+### Prompts in Phoenix
+
+Git is the source of truth for each agent's instructions (`agent/instructions/<id>.md`), and the app only ever
+reads those files. `prompt_sync` copies them to Phoenix, so they can be viewed, compared and tried in its
+playground: each agent becomes the Phoenix prompt `<id>`, and the version tagged `<ENVIRONMENT>` is the one that
+environment runs. A sync adds a version and moves the tag only when the file's text or the default model changed.
+
+```sh
+cd backend
+PHOENIX_URL=http://localhost:6006 uv run python -m bean_ai_backend.prompt_sync
+```
+
+| Variable          | Example                 | Notes                                                    |
+| ----------------- | ----------------------- | -------------------------------------------------------- |
+| `PHOENIX_URL`     | `http://localhost:6006` | Phoenix's base URL. Unset: the sync exits 1.             |
+| `PHOENIX_API_KEY` | (secret)                | Same key as for tracing; needed when Phoenix has auth on. |
+| `ENVIRONMENT`     | `local`                 | The tag the synced versions get.                         |
+
+The sync fails closed: if any agent can't be synced it logs which and why, and exits 1. A version improved in the
+playground goes back into the `.md` file by hand, through review like any other change.
+
 ## API
 
 | Method   | Path                        | Notes                                                                     |
@@ -159,6 +181,7 @@ stopped mid-stream isn't remembered.
 ```
 main.py             creates the app, CORS, includes the routers, sets up tracing; nothing else
 observability.py    setup_tracing(): OTLP traces of agent runs (OpenInference, for Phoenix) and HTTP requests
+prompt_sync.py      copies agent/instructions/*.md to Phoenix prompts, tagged by ENVIRONMENT (run on deploy)
 config.py           settings from env vars / backend/.env, and the loaded model and agent registries
 deps.py             FastAPI Depends() helpers (get_store / StoreDep)
 routers/            thin HTTP: validate, call a service, return a schema
